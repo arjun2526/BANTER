@@ -52,6 +52,20 @@ html[data-theme="light"] {
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    overflow-x: hidden;
+  }
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  *::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+  }
+  body {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
   }
   body {
     margin: 0;

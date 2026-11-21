@@ -16,7 +16,7 @@ export function Mark({ className = "size-10" }: { className?: string }) {
 export function Wordmark({ subtitle = true }: { subtitle?: boolean }) {
   return (
     <div className="min-w-0">
-      <div className="font-display text-2xl leading-none tracking-tight text-fg">Banter</div>
+      <div className="font-display text-2xl leading-none tracking-tight text-fg">BANTER</div>
       {subtitle ? <p className="mt-1 text-sm text-muted">Every conversation has a story.</p> : null}
     </div>
   );

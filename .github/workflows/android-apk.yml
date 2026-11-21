@@ -31,7 +31,7 @@ jobs:
           npm init -y
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
           npx cap init BANTER com.arjun2526.banter --web-dir=www
-          node -e "const fs=require('fs');const p='capacitor.config.ts';let s=fs.readFileSync(p,'utf8');s=s.replace(/server:\s*\{[^}]*\},?/s,'');s=s.replace(/const config: CapacitorConfig = \{/, 'const config: CapacitorConfig = { server: { url: \'https://arjun2526.github.io/BANTER/\', cleartext: false },');fs.writeFileSync(p,s)"
+          node -e "const fs=require('fs');const p='capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.server={url:'https://arjun2526.github.io/BANTER/',cleartext:false};fs.writeFileSync(p,JSON.stringify(c,null,2))"
           npx cap add android
           npx cap sync android
       - name: Build installable debug APK

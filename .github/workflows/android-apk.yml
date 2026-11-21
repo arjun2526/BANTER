@@ -21,7 +21,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: android-actions/setup-android@v3
       - name: Create Capacitor Android wrapper for current BANTER preview
         run: |
           mkdir -p /tmp/banter-apk/www

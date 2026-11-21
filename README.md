@@ -57,3 +57,12 @@ npm run build
 ```
 
 A successful static preview deployment does not prove that the full-stack authentication, messaging, media uploads or calls work. Test each feature against the actual server deployment before using real accounts or messages.
+
+
+## Supabase backend
+
+The BANTER Supabase project is configured in Mumbai (`ap-south-1`). Its database contains 24 application tables with row-level security enabled, private chat media and avatar buckets, and an authenticated `banter-api` Edge Function.
+
+For local client configuration, copy `.env.example` to `.env`. The Supabase publishable key is intended for client use with RLS enabled. Never place a service-role or secret key in browser or Android code.
+
+**Migration status:** the original UI and Better Auth/TanStack Start implementation are still present. The Supabase foundation and profile/onboarding API are deployed, but the complete UI migration is not finished. GitHub Pages remains a static preview, not a live messaging service.

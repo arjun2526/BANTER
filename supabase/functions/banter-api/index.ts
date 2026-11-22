@@ -34,6 +34,26 @@ Deno.serve(async(req:Request)=>{
   for(const p of r.data??[]){if(await isBlocked(user.id,p.user_id))continue;const rel=await relationship(p.user_id);if(p.discoverability==="friends"&&rel!=="friends"&&p.username!==q)continue;people.push(mapPublic(p,rel,mine))}
   people.sort((a,b)=>Number(b.username===q)-Number(a.username===q));return reply(200,{ok:true,people});
  }
+
+ if(body.action==="load_people"){
+  const me=await profile(user.id);if(!me?.onboarding_complete)return reply(403,{ok:false,error:"Finish your profile first."});const mine=parseList(me.interests);
+  const rq=await db.from("friend_requests").select("id,from_user_id,to_user_id,created_at").eq("status","pending").or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`).order("created_at",{ascending:false});
+  if(rq.error)return reply(400,{ok:false,error:"Could not load friend requests."});
+  const reqIds=[...new Set((rq.data??[]).map(x=>x.from_user_id===user.id?x.to_user_id:x.from_user_id))];
+  const fr=await db.from("friendships").select("user_a,user_b").or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+  if(fr.error)return reply(400,{ok:false,error:"Could not load friends."});
+  const friendIds=(fr.data??[]).map(x=>x.user_a===user.id?x.user_b:x.user_a);
+  const allIds=[...new Set([...reqIds,...friendIds])];
+  const known=allIds.length?await db.from("profiles").select("*").in("user_id",allIds):{data:[],error:null};
+  if(known.error)return reply(400,{ok:false,error:"Could not load profiles."});
+  const byId=new Map((known.data??[]).map(x=>[x.user_id,x]));
+  const requests=(rq.data??[]).flatMap(x=>{const pid=x.from_user_id===user.id?x.to_user_id:x.from_user_id,p=byId.get(pid);if(!p)return [];return [{id:x.id,direction:x.from_user_id===user.id?"out":"in",person:mapPublic(p,x.from_user_id===user.id?"pending-out":"pending-in",mine)}]});
+  const friends=(fr.data??[]).flatMap(x=>{const pid=x.user_a===user.id?x.user_b:x.user_a,p=byId.get(pid);return p?[mapPublic(p,"friends",mine)]:[]}).sort((a,b)=>a.displayName.localeCompare(b.displayName));
+  const suggestions=await db.from("profiles").select("*").eq("onboarding_complete",true).eq("status","active").eq("discoverability","everyone").neq("user_id",user.id).order("created_at",{ascending:false}).limit(40);
+  if(suggestions.error)return reply(400,{ok:false,error:"Could not load suggestions."});
+  const ranked=(suggestions.data??[]).filter(p=>!allIds.includes(p.user_id)&&!reqIds.includes(p.user_id)).filter(p=>!((await isBlocked(user.id,p.user_id)))).map(p=>({p,score:parseList(p.interests).filter(x=>mine.includes(x)).length})).filter(x=>mine.length?x.score>0:true).sort((a,b)=>b.score-a.score).slice(0,12);
+  return reply(200,{ok:true,requests,friends,suggestions:ranked.map(x=>mapPublic(x.p,"none",mine))});
+ }
  if(body.action==="get_profile"){
   const me=await profile(user.id);if(!me)return reply(404,{ok:false,error:"Profile missing."});let p=null;if(typeof d.userId==="string")p=await profile(d.userId);else if(typeof d.username==="string"){const n=cleanUsername(d.username);if(!n)return reply(400,{ok:false,error:"That Banter ID is not valid."});const r=await db.from("profiles").select("*").eq("username",n).maybeSingle();p=r.data}
   if(!p||!p.onboarding_complete)return reply(404,{ok:false,error:"No one uses that Banter ID."});if(p.user_id===user.id)return reply(200,{ok:true,self:true,me:mapMe(p)});const isFriend=await areFriends(user.id,p.user_id);if(p.discoverability==="nobody"&&!isFriend)return reply(403,{ok:false,error:"This profile is not available."});if(await isBlocked(user.id,p.user_id)){const mineBlocked=!!(await db.from("blocks").select("blocked_id").eq("blocker_id",user.id).eq("blocked_id",p.user_id).maybeSingle()).data;return reply(200,{ok:true,self:false,person:{...mapPublic(p,"blocked",[]),displayName:mineBlocked?p.display_name:"Unavailable",bio:"",about:"",avatarUrl:null,interests:[],blockedByMe:mineBlocked,canMessage:false}})}

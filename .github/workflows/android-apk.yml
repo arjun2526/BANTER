@@ -56,7 +56,7 @@ jobs:
           mkdir -p resources
           npm install --no-save sharp @capacitor/assets
           node -e "require('sharp')('public/banter-icon.svg').resize(512,512).png().toFile('resources/icon.png')"
-          npx capacitor-assets generate --android
+          npx @capacitor/assets generate --android
           npx cap sync android
       - name: Build installable debug APK
         working-directory: android

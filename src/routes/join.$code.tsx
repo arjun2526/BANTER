@@ -9,7 +9,7 @@ export const Route = createFileRoute("/join/$code")({
 function JoinRedirect() {
   const { code } = Route.useParams();
   useEffect(() => {
-    window.location.replace(`/?join=${encodeURIComponent(code)}`);
+    window.location.replace(`${import.meta.env.BASE_URL}?join=${encodeURIComponent(code)}`);
   }, [code]);
   return <BootScreen label="Opening your invite" />;
 }

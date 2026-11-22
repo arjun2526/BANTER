@@ -1,4 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireSupabase } from "@/lib/supabase/client";
+
+async function supabaseAction<T extends { ok: boolean; error?: string } = { ok: boolean; error?: string }>(
+  action: string,
+  data: Record<string, unknown> = {},
+): Promise<T> {
+  const { data: result, error } = await requireSupabase().functions.invoke("banter-api", { body: { action, data } });
+  if (error) {
+    const context = (error as { context?: Response }).context;
+    if (context instanceof Response) {
+      try { return await context.json() as T; } catch { /* fallback below */ }
+    }
+    return { ok: false, error: error.message || "BANTER request failed." } as T;
+  }
+  return result as T;
+}
+
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
@@ -231,32 +248,7 @@ async function requireActive(sql: Sql, userId: string) {
   return { error: null, row };
 }
 
-export const getMe = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }): Promise<
-    | { ok: true; tombstone: true }
-    | { ok: true; tombstone: false; me: ReturnType<typeof mapMe> }
-    | Err
-  > => {
-    const sql = await getSql();
-    const tomb = await sql<{ user_id: string }>`
-      select user_id from account_tombstones where user_id = ${context.userId}
-    `;
-    if (tomb[0]) return { ok: true, tombstone: true };
-    const auth = await authUser(sql, context.userId);
-    let row = await loadProfile(sql, context.userId);
-    if (!row) {
-      const name = cleanDisplayName(auth.name) ?? "New member";
-      await sql`
-        insert into profiles (user_id, display_name, avatar_url)
-        values (${context.userId}, ${name}, ${safeMediaUrl(auth.image)})
-        on conflict (user_id) do nothing
-      `;
-      row = await loadProfile(sql, context.userId);
-    }
-    if (!row) return fail("Could not open your profile.");
-    return { ok: true, tombstone: false, me: mapMe(row, auth.email) };
-  });
+export const getMe = () => supabaseAction("get_me");
 
 const Onboard = z.object({
   displayName: z.string(),
@@ -267,59 +259,9 @@ const Onboard = z.object({
   hobbies: z.string().max(200).optional(),
 });
 
-export const completeOnboarding = createServerFn({ method: "POST" })
-  .validator((input: unknown) => Onboard.parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<Ok<{ me: ReturnType<typeof mapMe> }> | Err> => {
-    const sql = await getSql();
-    const row = await loadProfile(sql, context.userId);
-    if (!row) return fail("Profile missing.");
-    if (row.status === "suspended") return fail("This account is suspended.");
-    const displayName = cleanDisplayName(data.displayName);
-    const username = cleanUsername(data.username);
-    if (!displayName) return fail("Use a name between 1 and 40 characters.");
-    if (!username) return fail("Banter IDs are 3–20 characters: letters, numbers, underscores.");
-    const taken = await sql<{ user_id: string }>`
-      select user_id from profiles where username = ${username} and user_id <> ${context.userId}
-    `;
-    if (taken[0]) return fail("That Banter ID is taken.");
-    const interests = JSON.stringify(cleanInterests(data.interests));
-    await sql`
-      update profiles set
-        display_name = ${displayName},
-        username = ${username},
-        bio = ${(data.bio ?? "").trim().slice(0, 160)},
-        about = ${(data.about ?? "").trim().slice(0, 600)},
-        hobbies = ${(data.hobbies ?? "").trim().slice(0, 200)},
-        interests = ${interests},
-        onboarding_complete = true,
-        username_changed_at = now(),
-        status = 'active'
-      where user_id = ${context.userId}
-    `;
-    await sql`
-      update profiles set role = 'admin'
-      where user_id = ${context.userId}
-        and not exists (select 1 from profiles where role = 'admin' and user_id <> ${context.userId})
-    `;
-    const auth = await authUser(sql, context.userId);
-    const next = await loadProfile(sql, context.userId);
-    if (!next) return fail("Could not save your profile.");
-    return { ok: true, me: mapMe(next, auth.email) };
-  });
+export const completeOnboarding = ({ data }: { data: Record<string, unknown> }) => supabaseAction("complete_onboarding", data);
 
-export const checkUsername = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ username: z.string() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true; available: boolean; username: string | null }> => {
-    const username = cleanUsername(data.username);
-    if (!username) return { ok: true, available: false, username: null };
-    const sql = await getSql();
-    const taken = await sql<{ user_id: string }>`
-      select user_id from profiles where username = ${username} and user_id <> ${context.userId}
-    `;
-    return { ok: true, available: !taken[0], username };
-  });
+export const checkUsername = ({ data }: { data: { username: string } }) => supabaseAction("check_username", data);
 
 const ProfilePatch = z.object({
   displayName: z.string().optional(),
@@ -342,110 +284,13 @@ const ProfilePatch = z.object({
   notifyStories: z.boolean().optional(),
 });
 
-export const updateProfile = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ProfilePatch.parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<Ok<{ me: ReturnType<typeof mapMe> }> | Err> => {
-    const sql = await getSql();
-    const row = await loadProfile(sql, context.userId);
-    if (!row) return fail("Profile missing.");
-    if (row.status === "suspended") return fail("This account is suspended.");
-    let username = row.username;
-    if (data.username != null) {
-      const next = cleanUsername(data.username);
-      if (!next) return fail("That Banter ID is not valid.");
-      if (next !== row.username) {
-        const changed = row.username_changed_at ? new Date(String(row.username_changed_at)).getTime() : 0;
-        if (row.onboarding_complete && Date.now() - changed < 14 * 24 * 3600 * 1000) {
-          return fail("You can change your Banter ID once every 14 days.");
-        }
-        const taken = await sql<{ user_id: string }>`
-          select user_id from profiles where username = ${next} and user_id <> ${context.userId}
-        `;
-        if (taken[0]) return fail("That Banter ID is taken.");
-        username = next;
-      }
-    }
-    const displayName = data.displayName != null ? cleanDisplayName(data.displayName) : row.display_name;
-    if (!displayName) return fail("Use a name between 1 and 40 characters.");
-    let birthday = row.birthday;
-    if (data.birthday !== undefined) {
-      if (data.birthday == null || data.birthday === "") birthday = null;
-      else if (!/^\d{4}-\d{2}-\d{2}$/.test(data.birthday)) return fail("Birthday should look like 1998-04-12.");
-      else {
-        const t = new Date(`${data.birthday}T00:00:00Z`).getTime();
-        if (Number.isNaN(t) || t > Date.now() || t < Date.UTC(1900, 0, 1)) return fail("That birthday does not look right.");
-        birthday = data.birthday;
-      }
-    }
-    let avatar = row.avatar_url;
-    if (data.avatarUrl !== undefined) {
-      if (data.avatarUrl == null || data.avatarUrl === "") avatar = null;
-      else {
-        const safe = safeMediaUrl(data.avatarUrl);
-        if (!safe || !safe.startsWith("data:image/")) return fail("Use a JPG, PNG, or WebP photo under 350 KB.");
-        avatar = safe;
-      }
-    }
-    let socials = row.socials;
-    if (data.socials) {
-      const clean: { label: string; url: string }[] = [];
-      for (const s of data.socials) {
-        const label = s.label.trim();
-        const url = s.url.trim();
-        if (!label || !url) continue;
-        let parsed: URL;
-        try {
-          parsed = new URL(url);
-        } catch {
-          return fail("Social links must be full https addresses.");
-        }
-        if (parsed.protocol !== "https:") return fail("Social links must start with https://");
-        clean.push({ label: label.slice(0, 24), url: parsed.toString().slice(0, 200) });
-      }
-      socials = JSON.stringify(clean);
-    }
-    const usernameChanged = username !== row.username ? new Date().toISOString() : iso(row.username_changed_at);
-    await sql`
-      update profiles set
-        display_name = ${displayName},
-        username = ${username},
-        bio = ${data.bio != null ? data.bio.trim().slice(0, 160) : row.bio},
-        about = ${data.about != null ? data.about.trim().slice(0, 600) : row.about},
-        hobbies = ${data.hobbies != null ? data.hobbies.trim().slice(0, 200) : row.hobbies},
-        location = ${data.location != null ? data.location.trim().slice(0, 60) : row.location},
-        birthday = ${birthday},
-        interests = ${data.interests ? JSON.stringify(cleanInterests(data.interests)) : row.interests},
-        socials = ${socials},
-        avatar_url = ${avatar},
-        discoverability = ${data.discoverability ?? row.discoverability},
-        last_seen_visibility = ${data.lastSeenVisibility ?? row.last_seen_visibility},
-        show_online = ${data.showOnline ?? row.show_online},
-        read_receipts = ${data.readReceipts ?? row.read_receipts},
-        theme = ${data.theme ?? row.theme},
-        notify_messages = ${data.notifyMessages ?? row.notify_messages},
-        notify_friends = ${data.notifyFriends ?? row.notify_friends},
-        notify_stories = ${data.notifyStories ?? row.notify_stories},
-        username_changed_at = ${usernameChanged}
-      where user_id = ${context.userId}
-    `;
-    const auth = await authUser(sql, context.userId);
-    const next = await loadProfile(sql, context.userId);
-    if (!next) return fail("Could not save.");
-    return { ok: true, me: mapMe(next, auth.email) };
-  });
+export const updateProfile = ({ data }: { data: Record<string, unknown> }) => {
+ const keys: Record<string,string> = {displayName:"display_name",username:"username",bio:"bio",about:"about",hobbies:"hobbies",location:"location",birthday:"birthday",interests:"interests",socials:"socials",avatarUrl:"avatar_url",discoverability:"discoverability",lastSeenVisibility:"last_seen_visibility",showOnline:"show_online",readReceipts:"read_receipts",theme:"theme",notifyMessages:"notify_messages",notifyFriends:"notify_friends",notifyStories:"notify_stories"};
+ const patch:Record<string,unknown>={};for(const [key,value] of Object.entries(data))if(keys[key])patch[keys[key]]=value;
+ return supabaseAction("update_profile",patch);
+};
 
-export const setAccountStatus = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ status: z.enum(["active", "deactivated"]) }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    const row = await loadProfile(sql, context.userId);
-    if (!row) return fail("Profile missing.");
-    if (row.status === "suspended") return fail("Suspended accounts cannot reactivate themselves.");
-    await sql`update profiles set status = ${data.status} where user_id = ${context.userId}`;
-    return { ok: true };
-  });
+export const setAccountStatus = ({ data }: { data: { status: "active" | "deactivated" } }) => supabaseAction("set_account_status", data);
 
 export const deleteAccount = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -487,21 +332,7 @@ export const startOver = createServerFn({ method: "POST" })
     return { ok: true, me: mapMe(row, auth.email) };
   });
 
-export const appeal = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ body: z.string().min(8).max(800) }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    const row = await loadProfile(sql, context.userId);
-    if (!row || row.status !== "suspended") return fail("Appeals are for suspended accounts.");
-    if (!(await allow(sql, context.userId, "appeal", 3, 24 * 3600 * 1000))) {
-      return fail("You already sent an appeal recently.");
-    }
-    await sql`
-      insert into appeals (id, user_id, body) values (${crypto.randomUUID()}, ${context.userId}, ${data.body.trim()})
-    `;
-    return { ok: true };
-  });
+export const appeal = ({ data }: { data: { body: string } }) => supabaseAction("appeal", data);
 
 async function relationship(sql: Sql, me: string, them: string) {
   if (await blockedByMe(sql, me, them)) return "blocked" as const;
@@ -551,41 +382,7 @@ function mapPublic(row: ProfileRow, rel: string, meInterests: string[]) {
   };
 }
 
-export const searchPeople = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ q: z.string().max(40) }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const me = await loadProfile(sql, context.userId);
-    if (!me?.onboarding_complete) return fail("Finish your profile first.");
-    const q = data.q.trim().toLowerCase().replace(/^@/, "").replace(/[\\%_]/g, "");
-    if (q.length < 2) return { ok: true as const, people: [] };
-    const prefix = `${q}%`;
-    const rows = await sql<ProfileRow>`
-      select * from profiles
-      where onboarding_complete = true
-        and status = 'active'
-        and user_id <> ${context.userId}
-        and username is not null
-        and discoverability <> 'nobody'
-        and username like ${prefix}
-        and not exists (
-          select 1 from blocks b
-          where (b.blocker_id = ${context.userId} and b.blocked_id = profiles.user_id)
-             or (b.blocker_id = profiles.user_id and b.blocked_id = ${context.userId})
-        )
-      order by (username = ${q}) desc, username asc
-      limit 15
-    `;
-    const mine = parseList(me.interests);
-    const people = [];
-    for (const row of rows) {
-      const rel = await relationship(sql, context.userId, row.user_id);
-      if (row.discoverability === "friends" && rel !== "friends" && row.username !== q) continue;
-      people.push(mapPublic(row, rel, mine));
-    }
-    return { ok: true as const, people };
-  });
+export const searchPeople = ({ data }: { data: { q: string } }) => supabaseAction("search_people", data);
 
 export const loadPeople = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
@@ -642,148 +439,9 @@ export const loadPeople = createServerFn({ method: "GET" })
     };
   });
 
-export const getProfile = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ userId: z.string().optional(), username: z.string().optional() }).parse(input),
-  )
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const me = await loadProfile(sql, context.userId);
-    if (!me) return fail("Profile missing.");
-    let row: ProfileRow | null = null;
-    if (data.userId) row = await loadProfile(sql, data.userId);
-    else if (data.username) {
-      const username = cleanUsername(data.username);
-      if (!username) return fail("That Banter ID is not valid.");
-      const rows = await sql<ProfileRow>`select * from profiles where username = ${username}`;
-      row = rows[0] ?? null;
-    }
-    if (!row || !row.onboarding_complete) return fail("No one uses that Banter ID.");
-    if (row.user_id === context.userId) {
-      const auth = await authUser(sql, context.userId);
-      return { ok: true as const, self: true as const, me: mapMe(row, auth.email) };
-    }
-    if (row.discoverability === "nobody" && !(await friends(sql, context.userId, row.user_id))) {
-      return fail("This profile is not available.");
-    }
-    if (await blocked(sql, context.userId, row.user_id)) {
-      const byMe = await blockedByMe(sql, context.userId, row.user_id);
-      return {
-        ok: true as const,
-        self: false as const,
-        person: {
-          ...mapPublic(row, "blocked", []),
-          displayName: byMe ? row.display_name : "Unavailable",
-          bio: "",
-          about: "",
-          avatarUrl: null,
-          interests: [],
-          blockedByMe: byMe,
-          canMessage: false,
-        },
-      };
-    }
-    const rel = await relationship(sql, context.userId, row.user_id);
-    return {
-      ok: true as const,
-      self: false as const,
-      person: { ...mapPublic(row, rel, parseList(me.interests)), blockedByMe: false },
-    };
-  });
+export const getProfile = ({ data }: { data: { userId?: string; username?: string } }) => supabaseAction("get_profile", data);
 
-export const friendAction = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({
-      userId: z.string(),
-      action: z.enum(["request", "accept", "reject", "cancel", "remove", "block", "unblock"]),
-    }).parse(input),
-  )
-  .middleware([authMiddleware])
-  .handler(async ({ context, data}): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    const gate = await requireActive(sql, context.userId);
-    if (gate.error || !gate.row) return fail(gate.error ?? "Unavailable.");
-    const them = await loadProfile(sql, data.userId);
-    if (!them || them.user_id === context.userId) return fail("That person is not available.");
-    const me = gate.row;
-    if (data.action === "unblock") {
-      await sql`delete from blocks where blocker_id = ${me.user_id} and blocked_id = ${them.user_id}`;
-      return { ok: true };
-    }
-    if (data.action === "block") {
-      if (!(await allow(sql, me.user_id, "block", 30, 3600_000))) return fail("Slow down a moment.");
-      await sql`
-        insert into blocks (blocker_id, blocked_id) values (${me.user_id}, ${them.user_id})
-        on conflict do nothing
-      `;
-      const [a, b] = pair(me.user_id, them.user_id);
-      await sql`delete from friendships where user_a = ${a} and user_b = ${b}`;
-      await sql`
-        update friend_requests set status = 'cancelled', updated_at = now()
-        where status = 'pending'
-          and ((from_user_id = ${me.user_id} and to_user_id = ${them.user_id})
-            or (from_user_id = ${them.user_id} and to_user_id = ${me.user_id}))
-      `;
-      return { ok: true };
-    }
-    if (await blocked(sql, me.user_id, them.user_id)) return fail("You can't reach this person.");
-    if (data.action === "request") {
-      if (them.status !== "active") return fail("That account is not accepting requests.");
-      if (await friends(sql, me.user_id, them.user_id)) return fail("You're already friends.");
-      if (!(await allow(sql, me.user_id, "friend", 20, 3600_000))) return fail("Too many requests. Try again later.");
-      const existing = await sql<{ id: string; from_user_id: string; status: string }>`
-        select id, from_user_id, status from friend_requests
-        where (from_user_id = ${me.user_id} and to_user_id = ${them.user_id})
-           or (from_user_id = ${them.user_id} and to_user_id = ${me.user_id})
-        order by created_at desc limit 1
-      `;
-      if (existing[0]?.status === "pending" && existing[0].from_user_id === them.user_id) {
-        return friendAccept(sql, me, them, existing[0].id);
-      }
-      if (existing[0]?.status === "pending") return fail("Request already sent.");
-      const id = crypto.randomUUID();
-      if (existing[0]) {
-        await sql`
-          update friend_requests set status = 'pending', from_user_id = ${me.user_id}, to_user_id = ${them.user_id}, updated_at = now()
-          where id = ${existing[0].id}
-        `;
-      } else {
-        await sql`
-          insert into friend_requests (id, from_user_id, to_user_id) values (${id}, ${me.user_id}, ${them.user_id})
-        `;
-      }
-      if (them.notify_friends) {
-        await notify(sql, them.user_id, "friend", "New friend request", `${me.display_name} wants to talk`, `user:${me.user_id}`);
-      }
-      return { ok: true };
-    }
-    if (data.action === "cancel") {
-      await sql`
-        update friend_requests set status = 'cancelled', updated_at = now()
-        where from_user_id = ${me.user_id} and to_user_id = ${them.user_id} and status = 'pending'
-      `;
-      return { ok: true };
-    }
-    if (data.action === "reject") {
-      await sql`
-        update friend_requests set status = 'rejected', updated_at = now()
-        where from_user_id = ${them.user_id} and to_user_id = ${me.user_id} and status = 'pending'
-      `;
-      return { ok: true };
-    }
-    if (data.action === "accept") {
-      const pending = await sql<{ id: string }>`
-        select id from friend_requests
-        where from_user_id = ${them.user_id} and to_user_id = ${me.user_id} and status = 'pending'
-      `;
-      if (!pending[0]) return fail("That request is no longer open.");
-      return friendAccept(sql, me, them, pending[0].id);
-    }
-    const [a, b] = pair(me.user_id, them.user_id);
-    await sql`delete from friendships where user_a = ${a} and user_b = ${b}`;
-    return { ok: true };
-  });
+export const friendAction = ({ data }: { data: { userId: string; action: "request" | "accept" | "reject" | "cancel" | "remove" | "block" | "unblock" } }) => supabaseAction("friend_action", { userId: data.userId, actionType: data.action });
 
 async function friendAccept(sql: Sql, me: ProfileRow, them: ProfileRow, requestId: string): Promise<{ ok: true }> {
   await sql`update friend_requests set status = 'accepted', updated_at = now() where id = ${requestId}`;
@@ -798,32 +456,7 @@ async function friendAccept(sql: Sql, me: ProfileRow, them: ProfileRow, requestI
   return { ok: true };
 }
 
-export const reportPerson = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({
-      userId: z.string().optional(),
-      conversationId: z.string().optional(),
-      reason: z.string().min(3).max(80),
-      details: z.string().max(500).optional(),
-    }).parse(input),
-  )
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    const gate = await requireActive(sql, context.userId);
-    if (gate.error) return fail(gate.error);
-    if (!(await allow(sql, context.userId, "report", 10, 24 * 3600_000))) {
-      return fail("You've sent several reports. Try again tomorrow.");
-    }
-    await sql`
-      insert into reports (id, reporter_id, target_user_id, target_conversation_id, reason, details)
-      values (
-        ${crypto.randomUUID()}, ${context.userId}, ${data.userId ?? null},
-        ${data.conversationId ?? null}, ${data.reason.trim()}, ${(data.details ?? "").trim()}
-      )
-    `;
-    return { ok: true };
-  });
+export const reportPerson = ({ data }: { data: { userId?: string; conversationId?: string; reason: string; details?: string } }) => supabaseAction("report_person", data);
 
 export const createInvite = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
@@ -1355,23 +988,7 @@ export const messageAction = createServerFn({ method: "POST" })
     return { ok: true, id };
   });
 
-export const pulseTyping = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ conversationId: z.string(), typing: z.boolean() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    const role = await memberRole(sql, data.conversationId, context.userId);
-    if (!role) return fail("Not a member.");
-    if (!data.typing) {
-      await sql`delete from typing where conversation_id = ${data.conversationId} and user_id = ${context.userId}`;
-    } else {
-      await sql`
-        insert into typing (conversation_id, user_id, updated_at) values (${data.conversationId}, ${context.userId}, now())
-        on conflict (conversation_id, user_id) do update set updated_at = now()
-      `;
-    }
-    return { ok: true };
-  });
+export const pulseTyping = ({ data }: { data: { conversationId: string; typing: boolean } }) => supabaseAction("pulse_typing", data);
 
 export const getAttachment = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ messageId: z.string() }).parse(input))
@@ -1838,18 +1455,7 @@ async function loadChats(sql: Sql, userId: string) {
   });
 }
 
-export const markNotices = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ id: z.string().optional() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true }> => {
-    const sql = await getSql();
-    if (data.id) {
-      await sql`update notifications set read_at = now() where id = ${data.id} and user_id = ${context.userId}`;
-    } else {
-      await sql`update notifications set read_at = now() where user_id = ${context.userId} and read_at is null`;
-    }
-    return { ok: true };
-  });
+export const markNotices = ({ data }: { data: { id?: string } }) => supabaseAction("mark_notices", data);
 
 const StoryIn = z.object({
   kind: z.enum(["text", "image"]),
@@ -1859,269 +1465,25 @@ const StoryIn = z.object({
   mediaMime: z.string().max(80).optional(),
 });
 
-export const postStory = createServerFn({ method: "POST" })
-  .validator((input: unknown) => StoryIn.parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<Ok<{ id: string }> | Err> => {
-    const sql = await getSql();
-    const gate = await requireActive(sql, context.userId);
-    if (gate.error) return fail(gate.error);
-    if (!(await allow(sql, context.userId, "story", 12, 24 * 3600_000))) return fail("Story limit for today reached.");
-    let media: string | null = null;
-    if (data.kind === "image") {
-      if (!data.mediaData || !data.mediaMime || !IMAGE.has(data.mediaMime)) return fail("Use a JPG, PNG, or WebP.");
-      const bare = bareBase64(data.mediaData);
-      if (!bare || Math.floor(bare.length * 0.75) > 380_000) return fail("That photo is too large.");
-      media = bare;
-    } else if (!(data.body ?? "").trim()) return fail("Write a status first.");
-    const id = crypto.randomUUID();
-    const expires = new Date(Date.now() + 24 * 3600_000).toISOString();
-    await sql`
-      insert into stories (id, user_id, kind, body, media_data, bg, expires_at)
-      values (${id}, ${context.userId}, ${data.kind}, ${(data.body ?? "").trim()}, ${media}, ${data.bg ?? "clay"}, ${expires})
-    `;
-    return { ok: true, id };
-  });
+export const postStory = ({ data }: { data: Record<string, unknown> }) => supabaseAction("post_story", data);
 
-export const storiesFor = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ userId: z.string() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    if (data.userId !== context.userId && !(await friends(sql, context.userId, data.userId))) {
-      return fail("Stories are visible to friends.");
-    }
-    const rows = await sql<{
-      id: string;
-      kind: string;
-      body: string;
-      bg: string;
-      created_at: unknown;
-      expires_at: unknown;
-      has_media: boolean;
-      views: number;
-    }>`
-      select s.id, s.kind, s.body, s.bg, s.created_at, s.expires_at,
-        (s.media_data is not null) as has_media,
-        (select count(*) from story_views v where v.story_id = s.id) as views
-      from stories s
-      where s.user_id = ${data.userId} and s.expires_at > now()
-      order by s.created_at asc
-    `;
-    if (data.userId !== context.userId) {
-      for (const row of rows) {
-        await sql`
-          insert into story_views (story_id, viewer_id) values (${row.id}, ${context.userId})
-          on conflict do nothing
-        `;
-      }
-    }
-    const reactions = await sql<{ story_id: string; emoji: string; n: number }>`
-      select story_id, emoji, count(*) as n from story_reactions
-      where story_id in (select id from stories where user_id = ${data.userId} and expires_at > now())
-      group by story_id, emoji
-    `;
-    return {
-      ok: true as const,
-      stories: rows.map((r) => ({
-        id: r.id,
-        kind: r.kind,
-        body: r.body,
-        bg: r.bg,
-        hasMedia: !!r.has_media,
-        createdAt: iso(r.created_at),
-        expiresAt: iso(r.expires_at),
-        views: data.userId === context.userId ? num(r.views) : 0,
-        reactions: reactions.filter((x) => x.story_id === r.id).map((x) => ({ emoji: x.emoji, count: num(x.n) })),
-      })),
-    };
-  });
+export const storiesFor = ({ data }: { data: { userId: string } }) => supabaseAction("stories_for", data);
 
-export const storyMedia = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ storyId: z.string() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const rows = await sql<{ user_id: string; media_data: string | null; media_mime_missing: string | null }>`
-      select user_id, media_data, null as media_mime_missing from stories where id = ${data.storyId} and expires_at > now()
-    `;
-    const row = rows[0];
-    if (!row?.media_data) return fail("Story unavailable.");
-    if (row.user_id !== context.userId && !(await friends(sql, context.userId, row.user_id))) {
-      return fail("Stories are visible to friends.");
-    }
-    return { ok: true as const, data: row.media_data };
-  });
+export const storyMedia = ({ data }: { data: { storyId: string } }) => supabaseAction("story_media", data);
 
-export const reactStory = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ storyId: z.string(), emoji: z.string().max(8) }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    if (!["♥", "☺", "!", "…", "✦", "↑"].includes(data.emoji)) return fail("That reaction is not available.");
-    const rows = await sql<{ user_id: string }>`
-      select user_id from stories where id = ${data.storyId} and expires_at > now()
-    `;
-    const owner = rows[0]?.user_id;
-    if (!owner) return fail("Story unavailable.");
-    if (owner !== context.userId && !(await friends(sql, context.userId, owner))) return fail("Not available.");
-    await sql`
-      insert into story_reactions (story_id, user_id, emoji) values (${data.storyId}, ${context.userId}, ${data.emoji})
-      on conflict (story_id, user_id) do update set emoji = ${data.emoji}
-    `;
-    if (owner !== context.userId) {
-      const ownerProfile = await loadProfile(sql, owner);
-      const me = await loadProfile(sql, context.userId);
-      if (ownerProfile?.notify_stories && me) {
-        await notify(sql, owner, "story", "Story reaction", `${me.display_name} reacted to your story`, `story:${owner}`);
-      }
-    }
-    return { ok: true };
-  });
+export const reactStory = ({ data }: { data: { storyId: string; emoji: string } }) => supabaseAction("react_story", data);
 
-export const deleteStory = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ storyId: z.string() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    await sql`delete from stories where id = ${data.storyId} and user_id = ${context.userId}`;
-    return { ok: true };
-  });
+export const deleteStory = ({ data }: { data: { storyId: string } }) => supabaseAction("delete_story", data);
 
-export const startCall = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ userId: z.string(), kind: z.enum(["voice", "video"]) }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<Ok<{ callId: string }> | Err> => {
-    const sql = await getSql();
-    const gate = await requireActive(sql, context.userId);
-    if (gate.error || !gate.row) return fail(gate.error ?? "Unavailable.");
-    if (!(await friends(sql, context.userId, data.userId))) return fail("You can call friends.");
-    if (await blocked(sql, context.userId, data.userId)) return fail("You can't call this person.");
-    if (!(await allow(sql, context.userId, "call", 12, 3600_000))) return fail("Too many call attempts.");
-    const id = crypto.randomUUID();
-    await sql`
-      insert into calls (id, caller_id, callee_id, kind, status) values (${id}, ${context.userId}, ${data.userId}, ${data.kind}, 'ringing')
-    `;
-    const callee = await loadProfile(sql, data.userId);
-    if (callee?.notify_messages) {
-      await notify(sql, data.userId, "call", data.kind === "video" ? "Incoming video call" : "Incoming voice call", gate.row.display_name, `call:${id}`);
-    }
-    return { ok: true, callId: id };
-  });
+export const startCall = ({ data }: { data: { userId: string; kind: "voice" | "video" } }) => supabaseAction("start_call", data);
 
-export const callAction = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ callId: z.string(), action: z.enum(["accept", "decline", "end", "cancel"]) }).parse(input),
-  )
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<Ok<{ status: string }> | Err> => {
-    const sql = await getSql();
-    const rows = await sql<{ caller_id: string; callee_id: string; status: string }>`
-      select caller_id, callee_id, status from calls where id = ${data.callId}
-    `;
-    const call = rows[0];
-    if (!call) return fail("Call not found.");
-    if (call.caller_id !== context.userId && call.callee_id !== context.userId) return fail("Not your call.");
-    if (data.action === "accept") {
-      if (call.callee_id !== context.userId) return fail("Only the person called can answer.");
-      await sql`update calls set status = 'active', started_at = now() where id = ${data.callId} and status = 'ringing'`;
-    } else if (data.action === "decline") {
-      await sql`update calls set status = 'declined', ended_at = now() where id = ${data.callId} and status = 'ringing'`;
-      await notify(sql, call.caller_id, "call", "Call declined", "They didn't pick up", "calls");
-    } else if (data.action === "cancel" || data.action === "end") {
-      const next = call.status === "ringing" ? "missed" : "ended";
-      await sql`update calls set status = ${data.action === "cancel" ? "missed" : "ended"}, ended_at = now() where id = ${data.callId}`;
-      if (data.action === "cancel") await notify(sql, call.callee_id, "call", "Missed call", "You missed a call", "calls");
-      return { ok: true, status: data.action === "cancel" ? "missed" : next };
-    }
-    const updated = await sql<{ status: string }>`select status from calls where id = ${data.callId}`;
-    return { ok: true, status: updated[0]?.status ?? "ended" };
-  });
+export const callAction = ({ data }: { data: { callId: string; action: "accept" | "decline" | "end" | "cancel" } }) => supabaseAction("call_action", data);
 
-export const pollCall = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ callId: z.string(), after: z.number().optional() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const rows = await sql<{ caller_id: string; callee_id: string; status: string; kind: string }>`
-      select caller_id, callee_id, status, kind from calls where id = ${data.callId}
-    `;
-    const call = rows[0];
-    if (!call || (call.caller_id !== context.userId && call.callee_id !== context.userId)) return fail("Not your call.");
-    const signals = await sql<{ id: number; from_user_id: string; payload: string }>`
-      select id, from_user_id, payload from call_signals
-      where call_id = ${data.callId} and id > ${data.after ?? 0} and from_user_id <> ${context.userId}
-      order by id asc
-      limit 40
-    `;
-    return {
-      ok: true as const,
-      status: call.status,
-      kind: call.kind,
-      signals: signals.map((s) => ({ id: num(s.id), from: s.from_user_id, payload: s.payload })),
-    };
-  });
+export const pollCall = ({ data }: { data: { callId: string; after?: number } }) => supabaseAction("poll_call", data);
 
-export const postSignal = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ callId: z.string(), payload: z.string().max(30_000) }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    const rows = await sql<{ caller_id: string; callee_id: string; status: string }>`
-      select caller_id, callee_id, status from calls where id = ${data.callId}
-    `;
-    const call = rows[0];
-    if (!call || (call.caller_id !== context.userId && call.callee_id !== context.userId)) return fail("Not your call.");
-    if (call.status !== "active" && call.status !== "ringing") return fail("Call is over.");
-    await sql`
-      insert into call_signals (call_id, from_user_id, payload) values (${data.callId}, ${context.userId}, ${data.payload})
-    `;
-    return { ok: true };
-  });
+export const postSignal = ({ data }: { data: { callId: string; payload: string } }) => supabaseAction("post_signal", data);
 
-export const callLog = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    const sql = await getSql();
-    const rows = await sql<{
-      id: string;
-      caller_id: string;
-      callee_id: string;
-      kind: string;
-      status: string;
-      created_at: unknown;
-      started_at: unknown;
-      ended_at: unknown;
-    }>`
-      select id, caller_id, callee_id, kind, status, created_at, started_at, ended_at
-      from calls
-      where caller_id = ${context.userId} or callee_id = ${context.userId}
-      order by created_at desc
-      limit 40
-    `;
-    const ids = [...new Set(rows.flatMap((r) => [r.caller_id, r.callee_id]))];
-    const names = new Map<string, string>();
-    for (const id of ids) {
-      const p = await loadProfile(sql, id);
-      names.set(id, p?.display_name ?? "Former member");
-    }
-    return {
-      ok: true as const,
-      calls: rows.map((r) => ({
-        id: r.id,
-        callerId: r.caller_id,
-        calleeId: r.callee_id,
-        peerId: r.caller_id === context.userId ? r.callee_id : r.caller_id,
-        peerName: names.get(r.caller_id === context.userId ? r.callee_id : r.caller_id) ?? "Someone",
-        kind: r.kind,
-        status: r.status,
-        direction: r.caller_id === context.userId ? "out" as const : "in" as const,
-        createdAt: iso(r.created_at),
-        startedAt: iso(r.started_at),
-        endedAt: iso(r.ended_at),
-      })),
-    };
-  });
+export const callLog = () => supabaseAction("call_log");
 
 export const listSessions = createServerFn({ method: "GET" })
   .middleware([authMiddleware])

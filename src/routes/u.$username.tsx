@@ -9,7 +9,7 @@ export const Route = createFileRoute("/u/$username")({
 function ProfileRedirect() {
   const { username } = Route.useParams();
   useEffect(() => {
-    window.location.replace(`/?u=${encodeURIComponent(username)}`);
+    window.location.replace(`${import.meta.env.BASE_URL}?u=${encodeURIComponent(username)}`);
   }, [username]);
   return <BootScreen label="Opening profile" />;
 }

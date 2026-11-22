@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase/client";
 
 type AdminUser = {
@@ -44,7 +44,7 @@ function AdminPage() {
     return response;
   }, []);
 
-  const load = useCallback(async (q = query) => {
+  const load = useCallback(async (q: string) => {
     setLoading(true);
     setNotice("");
     try {
@@ -66,7 +66,7 @@ function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [callAdmin, query]);
+  }, [callAdmin]);
 
   useEffect(() => { void load(""); }, [load]);
 
@@ -134,10 +134,10 @@ function AdminPage() {
   </Shell>;
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children }: { children: ReactNode }) {
   return <main className="min-h-screen bg-[#100e0d] px-4 py-7 text-[#f3eae2] sm:px-8 sm:py-10"><div className="mx-auto max-w-5xl">{children}</div></main>;
 }
-function Panel({ children }: { children: React.ReactNode }) {
+function Panel({ children }: { children: ReactNode }) {
   return <div className="mx-auto mt-20 max-w-md rounded-[2rem] border border-white/10 bg-[#1b1715] p-7 shadow-2xl">{children}</div>;
 }
 function Mark() {

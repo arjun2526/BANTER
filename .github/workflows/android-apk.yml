@@ -35,7 +35,6 @@ jobs:
         env:
           VITE_BASE_PATH: /
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       - name: Install Capacitor tooling
         run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
       - name: Create native Android project

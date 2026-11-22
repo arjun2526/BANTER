@@ -51,8 +51,11 @@ jobs:
             SITE_DIR=dist
           elif [ -f dist/client/index.html ]; then
             SITE_DIR=dist/client
+          elif [ -f dist/client/_shell.html ]; then
+            SITE_DIR=dist/client
+            cp "$SITE_DIR/_shell.html" "$SITE_DIR/index.html"
           else
-            echo "Static index.html was not produced."
+            echo "Static SPA shell was not produced."
             find dist -maxdepth 3 -type f | head -80
             exit 1
           fi

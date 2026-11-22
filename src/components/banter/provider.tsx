@@ -315,8 +315,18 @@ export function BanterProvider({ children }: { children: ReactNode }) {
 
   const loadPeople = useCallback(async () => {
     const res = await run(api.loadPeople());
-    if (res && "friends" in res) setPeople({ requests: res.requests, friends: res.friends, suggestions: res.suggestions });
-  }, [run]);
+    if (res && "friends" in res) {
+      setPeople({ requests: res.requests, friends: res.friends, suggestions: res.suggestions });
+      // Every accepted friend gets a direct conversation in the Chats feed,
+      // even if neither person has sent the first message yet.
+      if (res.friends.length) {
+        const opened = await Promise.all(res.friends.map((friend) => api.openDirect({ data: { userId: friend.userId } })));
+        const failed = opened.find((item) => !item.ok);
+        if (failed) toastMsg(failed.error ?? "Could not prepare a chat with one of your friends.");
+        else await refresh();
+      }
+    }
+  }, [run, refresh, toastMsg]);
 
   const refreshPeople = useCallback(async () => {
     await loadPeople();

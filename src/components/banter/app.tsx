@@ -545,7 +545,7 @@ function People() {
               <div className="min-w-0 flex-1"><PersonRow person={r.person} /></div>
               {r.direction === "in" ? (
                 <div className="flex shrink-0 gap-1">
-                  <Btn className="px-3" onClick={() => void b.run(api.friendAction({ data: { userId: r.person.userId, action: "accept" } })).then((res) => { if (res) void b.refresh(); })}>Accept</Btn>
+                  <Btn className="px-3" onClick={() => void b.run(api.friendAction({ data: { userId: r.person.userId, action: "accept" } })).then(async (res) => { if (res) { await Promise.all([b.refresh(), b.refreshPeople()]); b.toastMsg("Friend added. Open their profile and tap Message to start chatting."); } })}>Accept</Btn>
                   <Btn tone="ghost" className="px-3" onClick={() => void b.run(api.friendAction({ data: { userId: r.person.userId, action: "reject" } })).then((res) => { if (res) void b.refresh(); })}>Decline</Btn>
                 </div>
               ) : <Btn tone="quiet" className="px-3" onClick={() => void b.run(api.friendAction({ data: { userId: r.person.userId, action: "cancel" } })).then((res) => { if (res) void b.refresh(); })}>Cancel</Btn>}
@@ -620,7 +620,7 @@ function PersonScreen({ userId }: { userId: string }) {
     if (!res) return;
     const next = await api.getProfile({ data: { userId } });
     if (next.ok && !next.self) setPerson(next.person);
-    await b.refresh();
+    await Promise.all([b.refresh(), b.refreshPeople()]);
   }
   async function message() {
     const res = await b.run(api.openDirect({ data: { userId } }));

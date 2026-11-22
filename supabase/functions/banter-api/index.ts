@@ -70,6 +70,19 @@ Deno.serve(async(req:Request)=>{
   if(action==="accept"){const r=await db.from("friend_requests").select("id").eq("from_user_id",other).eq("to_user_id",user.id).eq("status","pending").maybeSingle();if(!r.data)return reply(400,{ok:false,error:"That request is no longer open."});await db.from("friend_requests").update({status:"accepted",updated_at:new Date().toISOString()}).eq("id",r.data.id);const [x,y]=pair(user.id,other);const wr=await db.from("friendships").upsert({user_a:x,user_b:y},{onConflict:"user_a,user_b",ignoreDuplicates:true});if(wr.error)return reply(400,{ok:false,error:"Could not accept request."});return reply(200,{ok:true})}
   if(action==="remove"){const [x,y]=pair(user.id,other);const wr=await db.from("friendships").delete().eq("user_a",x).eq("user_b",y);if(wr.error)return reply(400,{ok:false,error:"Could not remove friend."});return reply(200,{ok:true})}
  }
+
+ if(body.action==="create_invite"){
+  const gate=await active();if(gate.error)return reply(403,{ok:false,error:gate.error});const cid=typeof d.conversationId==="string"?d.conversationId:null;if(cid&&await roleFor(cid,user.id)!=="admin")return reply(403,{ok:false,error:"Only group admins can create invite links."});if(!await rateAllowed("invite",20,3600000))return reply(429,{ok:false,error:"Too many invite links."});const alphabet="abcdefghjkmnpqrstuvwxyz23456789";const bytes=crypto.getRandomValues(new Uint8Array(10));const code=[...bytes].map(b=>alphabet[b%alphabet.length]).join("");const expiresAt=new Date(Date.now()+7*86400000).toISOString();const r=await db.from("invites").insert({code,created_by:user.id,conversation_id:cid,expires_at:expiresAt});if(r.error)return reply(400,{ok:false,error:"Could not create invite link."});return reply(200,{ok:true,code,expiresAt});
+ }
+ if(body.action==="revoke_invite"){
+  const code=typeof d.code==="string"?d.code.trim().toLowerCase():"";if(!code)return reply(400,{ok:false,error:"Invalid invite code."});const r=await db.from("invites").update({revoked_at:new Date().toISOString()}).eq("code",code).eq("created_by",user.id).is("revoked_at",null);if(r.error)return reply(400,{ok:false,error:"Could not revoke invite."});return reply(200,{ok:true});
+ }
+ if(body.action==="redeem_invite"){
+  const code=typeof d.code==="string"?d.code.trim().toLowerCase():"";if(!code||code.length>20)return reply(400,{ok:false,error:"Invalid invite code."});const r=await db.rpc("banter_redeem_invite",{p_code:code});if(r.error)return reply(400,{ok:false,error:r.error.message||"This invite is no longer valid."});return reply(200,{ok:true,...r.data});
+ }
+ if(body.action==="open_direct"){
+  const other=typeof d.userId==="string"?d.userId:"";if(!other||other===user.id)return reply(400,{ok:false,error:"Choose a friend."});const r=await db.rpc("banter_open_direct",{p_other:other});if(r.error)return reply(400,{ok:false,error:r.error.message||"Could not open conversation."});return reply(200,{ok:true,conversationId:r.data});
+ }
  if(body.action==="set_account_status"){
   const status=d.status;if(!["active","deactivated"].includes(String(status)))return reply(400,{ok:false,error:"Invalid account status."});
   const p=await profile(user.id);if(!p)return reply(400,{ok:false,error:"Profile missing."});if(p.status==="suspended")return reply(403,{ok:false,error:"Suspended accounts cannot reactivate themselves."});

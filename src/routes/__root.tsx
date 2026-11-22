@@ -14,7 +14,7 @@ export const Route = createRootRoute({
       { property: "og:site_name", content: "BANTER" },
       { property: "og:title", content: "BANTER — Every conversation has a story." },
       { property: "og:description", content: "A better place for conversations with your people." },
-      { property: "og:image", content: "/og.jpg" },
+      { property: "og:image", content: `${import.meta.env.BASE_URL}og.jpg` },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
@@ -27,7 +27,7 @@ export const Route = createRootRoute({
         href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,650&family=Outfit:wght@400;500;600&display=swap",
       },
       { rel: "manifest", href: `${import.meta.env.BASE_URL}manifest.webmanifest` },
-      { rel: "apple-touch-icon", href: "/favicon.svg" },
+      { rel: "apple-touch-icon", href: `${import.meta.env.BASE_URL}favicon.svg` },
     ],
   }),
   component: () => (

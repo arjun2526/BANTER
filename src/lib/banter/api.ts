@@ -585,68 +585,9 @@ export const messageAction = ({ data }: { data: Record<string, unknown> }) => su
 
 export const pulseTyping = ({ data }: { data: { conversationId: string; typing: boolean } }) => supabaseAction("pulse_typing", data);
 
-export const getAttachment = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ messageId: z.string() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const rows = await sql<{
-      conversation_id: string;
-      media_data: string | null;
-      media_mime: string | null;
-      media_name: string | null;
-      deleted_at: unknown;
-    }>`
-      select conversation_id, media_data, media_mime, media_name, deleted_at from messages where id = ${data.messageId}
-    `;
-    const msg = rows[0];
-    if (!msg || msg.deleted_at || !msg.media_data || !msg.media_mime) return fail("Attachment unavailable.");
-    if (!(await memberRole(sql, msg.conversation_id, context.userId))) return fail("You don't have access.");
-    return { ok: true as const, mime: msg.media_mime, data: msg.media_data, name: msg.media_name };
-  });
+export const getAttachment = ({ data }: { data: { messageId: string } }) => supabaseAction("get_attachment", data);
 
-export const searchMessages = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ q: z.string().max(80), conversationId: z.string().optional() }).parse(input),
-  )
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const q = data.q.trim().replace(/[\\%_]/g, "");
-    if (q.length < 2) return { ok: true as const, hits: [] };
-    const like = `%${q}%`;
-    const rows = await sql<{
-      id: string;
-      conversation_id: string;
-      body: string;
-      created_at: unknown;
-      title: string | null;
-      kind: string;
-    }>`
-      select m.id, m.conversation_id, m.body, m.created_at, c.title, c.kind
-      from messages m
-      join conversations c on c.id = m.conversation_id
-      join conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = ${context.userId} and cm.left_at is null
-      where m.deleted_at is null
-        and (m.expires_at is null or m.expires_at > now())
-        and m.body ilike ${like}
-        and (${data.conversationId ?? null}::text is null or m.conversation_id = ${data.conversationId ?? null})
-        and not exists (select 1 from message_hides h where h.message_id = m.id and h.user_id = ${context.userId})
-      order by m.created_at desc
-      limit 30
-    `;
-    return {
-      ok: true as const,
-      hits: rows.map((r) => ({
-        id: r.id,
-        conversationId: r.conversation_id,
-        body: snippet(r.body, 120),
-        createdAt: iso(r.created_at),
-        title: r.title,
-        kind: r.kind,
-      })),
-    };
-  });
+export const searchMessages = ({ data }: { data: { q: string; conversationId?: string } }) => supabaseAction("search_messages", data);
 
 type Msg = {
   id: string;

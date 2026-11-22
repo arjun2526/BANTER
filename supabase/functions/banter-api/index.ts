@@ -39,7 +39,7 @@ Deno.serve(async(req:Request)=>{
   if(adminAction==="admin_list_users"){
    const q=typeof d.q==="string"?d.q.trim().slice(0,80):"";
    let query=root.from("profiles").select("user_id,username,display_name,avatar_url,status,role,created_at,onboarding_complete",{count:"exact"}).order("created_at",{ascending:false}).limit(200);
-   if(q)query=query.or("username.ilike.%"+q.replace(/[%,()]/g,"")+"%,display_name.ilike.%"+q.replace(/[%,()]/g,"")+"%");
+   if(q)query=query.or("username.ilike.%"+q.replace(/[^a-zA-Z0-9 _-]/g,"")+"%,display_name.ilike.%"+q.replace(/[%,()]/g,"")+"%");
    const [users,total,suspended]=await Promise.all([query,root.from("profiles").select("user_id",{count:"exact",head:true}),root.from("profiles").select("user_id",{count:"exact",head:true}).eq("status","suspended")]);
    if(users.error||total.error||suspended.error)return reply(400,{ok:false,error:"Could not load admin data."});
    const logs=await root.from("admin_audit_log").select("id,actor_user_id,target_user_id,action,reason,created_at").order("created_at",{ascending:false}).limit(20);

@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabase } from "@/lib/supabase/client";
 
-async function supabaseAction<T extends { ok: boolean; error?: string } = { ok: boolean; error?: string }>(
+type SupabaseActionResult = { ok: boolean; error?: string; [key: string]: any };
+
+async function supabaseAction<T extends SupabaseActionResult = SupabaseActionResult>(
   action: string,
   data: Record<string, unknown> = {},
 ): Promise<T> {

@@ -140,7 +140,7 @@ Deno.serve(async(req:Request)=>{
   if(patch.bio!==undefined&&typeof patch.bio==="string")patch.bio=patch.bio.trim().slice(0,160);
   if(patch.about!==undefined&&typeof patch.about==="string")patch.about=patch.about.trim().slice(0,600);
   if(patch.hobbies!==undefined&&typeof patch.hobbies==="string")patch.hobbies=patch.hobbies.trim().slice(0,200);
-  if(patch.avatar_url!==undefined&&patch.avatar_url!==null&&typeof patch.avatar_url==="string"&&!/^data:image\\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(patch.avatar_url)&&!/^https:\\/\\//.test(patch.avatar_url))return reply(400,{ok:false,error:"Invalid avatar image."});
+  if(patch.avatar_url!==undefined&&patch.avatar_url!==null){const av=String(patch.avatar_url);if(!av.startsWith("https://")&&!["data:image/jpeg;base64,","data:image/png;base64,","data:image/webp;base64,"].some(prefix=>av.startsWith(prefix)))return reply(400,{ok:false,error:"Invalid avatar image."});if(av.length>500000)return reply(400,{ok:false,error:"Avatar image is too large."});}
   if(patch.theme!==undefined&&!["dark","light"].includes(String(patch.theme)))return reply(400,{ok:false,error:"Invalid theme."});
   if(patch.discoverability!==undefined&&!["everyone","friends","nobody"].includes(String(patch.discoverability)))return reply(400,{ok:false,error:"Invalid discoverability setting."});
   const {data,error}=await db.from("profiles").update(patch).eq("user_id",user.id).select("*").single();

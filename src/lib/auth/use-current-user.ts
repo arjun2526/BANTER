@@ -20,10 +20,7 @@ export function useCurrentUserState(): CurrentUserState {
   const primaryEmail = data?.user.email ?? null;
   const profileImageUrl = data?.user.image ?? null;
   const user = useMemo<AppUser | null>(
-    () =>
-      id
-        ? { id, displayName, primaryEmail, profileImageUrl }
-        : null,
+    () => id ? { id, displayName, primaryEmail, profileImageUrl } : null,
     [id, displayName, primaryEmail, profileImageUrl],
   );
   return useMemo(() => ({ user, isPending }), [user, isPending]);

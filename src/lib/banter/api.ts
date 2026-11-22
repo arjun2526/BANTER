@@ -79,5 +79,11 @@ export const signOutAll = async () => {
   return error ? { ok: false, error: error.message } : { ok: true };
 };
 export const exportArchive = ({ data }: { data: { includeMedia?: boolean } }) => invoke("export_archive", data);
-export const adminOverview = () => invoke("admin_overview");
+export type AdminOverview = {
+  stats: { people: number; messagesDay: number; openReports: number; openAppeals: number; activeDay: number };
+  reports: { id: string; reason: string; details: string | null; status: string; createdAt: string; reporter: string | null; target: string | null }[];
+  users: { userId: string; username: string | null; displayName: string; status: string; role: string; createdAt: string }[];
+  appeals: { id: string; userId: string; username: string | null; body: string; status: string; createdAt: string }[];
+};
+export const adminOverview = () => invoke<AdminOverview & ApiResult>("admin_overview");
 export const adminAct = ({ data }: { data: Record<string, unknown> }) => invoke("admin_act", data);

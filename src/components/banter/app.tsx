@@ -14,6 +14,7 @@ import {
   Video,
 } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
+import { requireSupabase } from "@/lib/supabase/client";
 import { signOut } from "@/lib/auth/client";
 import * as api from "@/lib/banter/api";
 import { decryptArchive, downloadBlob, encryptArchive } from "@/lib/banter/backup";
@@ -25,6 +26,26 @@ import { useBanter, type Chat, type Me, type Msg, type Person, type View } from 
 import { Avatar, Btn, Empty, Field, TopBar, inputClass, when } from "@/components/banter/ui";
 
 const EMOJI = ["😀", "😂", "🥹", "🔥", "✨", "👏", "❤️", "🎉", "🙏", "😎", "🤔", "😭"];
+
+function mediaExt(mime: string) {
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+    "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov",
+  };
+  return map[mime] ?? "";
+}
+
+async function uploadUserMedia(bucket: "banter-avatars" | "banter-story-media", userId: string, file: File, maxBytes: number) {
+  const ext = mediaExt(file.type);
+  if (!ext) throw new Error("Choose a supported JPG, PNG, WebP, MP4, WebM, or MOV file.");
+  if (file.size > maxBytes) throw new Error(`Choose a file smaller than ${Math.round(maxBytes / 1024 / 1024)} MB.`);
+  const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await requireSupabase().storage.from(bucket).upload(path, file, {
+    contentType: file.type, cacheControl: "3600", upsert: false,
+  });
+  if (error) throw error;
+  return path;
+}
 
 export function BanterApp() {
   const b = useBanter();
@@ -520,8 +541,14 @@ function People() {
         ) : null}
         <Section title="Requests">
           {b.people?.requests.length ? b.people.requests.map((r) => (
-            <div key={r.id} className="flex items-center gap-2 py-2">
-              <PersonRow person={r.person} />
+            <div key={r.id} className="flex items-center gap-2 border-b border-line py-2">
+              <div className="min-w-0 flex-1"><PersonRow person={r.person} /></div>
+              {r.direction === "in" ? (
+                <div className="flex shrink-0 gap-1">
+                  <Btn className="px-3" onClick={() => void b.run(api.friendAction({ data: { userId: r.person.userId, action: "accept" } })).then((res) => { if (res) void b.refresh(); })}>Accept</Btn>
+                  <Btn tone="ghost" className="px-3" onClick={() => void b.run(api.friendAction({ data: { userId: r.person.userId, action: "reject" } })).then((res) => { if (res) void b.refresh(); })}>Decline</Btn>
+                </div>
+              ) : <Btn tone="quiet" className="px-3" onClick={() => void b.run(api.friendAction({ data: { userId: r.person.userId, action: "cancel" } })).then((res) => { if (res) void b.refresh(); })}>Cancel</Btn>}
             </div>
           )) : <p className="text-sm text-muted">No open requests.</p>}
         </Section>
@@ -620,11 +647,16 @@ function Stories() {
         </div>
         <Btn onClick={() => void b.run(api.postStory({ data: { kind: "text", body, bg } })).then((res) => { if (res) { setBody(""); void b.refresh(); } })}>Share with friends</Btn>
         <label className="block">
-          <span className="mb-2 block text-sm text-muted">Or a photo</span>
-          <input type="file" accept="image/*" onChange={(e) => {
+          <span className="mb-2 block text-sm text-muted">Add a photo or video (up to 50 MB)</span>
+          <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" onChange={(e) => {
             const file = e.target.files?.[0];
-            if (!file) return;
-            void compressImage(file).then((img) => b.run(api.postStory({ data: { kind: "image", body, bg, mediaData: img.data, mediaMime: img.mime } }))).then(() => b.refresh()).catch((err) => b.toastMsg(err instanceof Error ? err.message : "Could not post that photo."));
+            if (!file || !b.me) return;
+            const kind = file.type.startsWith("video/") ? "video" : "image";
+            void uploadUserMedia("banter-story-media", b.me.userId, file, 50 * 1024 * 1024)
+              .then((mediaPath) => b.run(api.postStory({ data: { kind, body, bg, mediaPath, mediaMime: file.type } })))
+              .then((res) => { if (res) { setBody(""); void b.refresh(); } })
+              .catch((err) => b.toastMsg(err instanceof Error ? err.message : "Could not post that story."));
+            e.target.value = "";
           }} />
         </label>
         <Section title="From friends">
@@ -644,21 +676,24 @@ function StoryViewer({ userId }: { userId: string }) {
   const b = useBanter();
   const [items, setItems] = useState<{ id: string; kind: string; body: string; bg: string; hasMedia: boolean; createdAt: string | null; views: number }[]>([]);
   const [index, setIndex] = useState(0);
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [media, setMedia] = useState<{ url: string; mime: string } | null>(null);
   useEffect(() => {
     void api.storiesFor({ data: { userId } }).then((res) => { if (res.ok) setItems(res.stories); else b.toastMsg(res.error ?? "Could not load stories."); });
   }, [userId]);
   const item = items[index];
   useEffect(() => {
-    if (!item?.hasMedia) { setPhoto(null); return; }
-    void api.storyMedia({ data: { storyId: item.id } }).then((res) => { if (res.ok) setPhoto(dataUrl("image/jpeg", res.data)); });
+    if (!item?.hasMedia) { setMedia(null); return; }
+    void api.storyMedia({ data: { storyId: item.id } }).then((res) => {
+      if (!res.ok) { b.toastMsg(res.error ?? "Could not load story media."); return; }
+      setMedia(res.url ? { url: res.url, mime: res.mime ?? item.mediaMime ?? "" } : { url: dataUrl(item.mediaMime ?? "image/jpeg", res.data), mime: item.mediaMime ?? "image/jpeg" });
+    });
   }, [item?.id, item?.hasMedia]);
   if (!item) return <div className="p-6"><TopBar title="Story" onBack={b.back} /><p className="mt-4 text-sm text-muted">Nothing live right now.</p></div>;
   return (
     <div className={`story-${item.bg} flex h-full flex-col`}>
       <TopBar title="Story" subtitle={when(item.createdAt)} onBack={b.back} />
       <div className="flex flex-1 flex-col justify-end p-5">
-        {photo ? <img src={photo} alt="" className="mb-4 max-h-[50vh] rounded-3xl object-cover" /> : null}
+        {media ? (media.mime.startsWith("video/") ? <video src={media.url} controls playsInline className="mb-4 max-h-[50vh] w-full rounded-3xl object-contain" /> : <img src={media.url} alt="" className="mb-4 max-h-[50vh] rounded-3xl object-cover" />) : null}
         <p className="font-display text-4xl">{item.body}</p>
         {userId === b.me?.userId ? <p className="mt-3 text-sm opacity-80">{item.views} views</p> : null}
         <div className="mt-4 flex gap-2">
@@ -791,7 +826,12 @@ function EditProfile() {
           <input type="file" accept="image/*" onChange={(e) => {
             const file = e.target.files?.[0];
             if (!file) return;
-            void compressImage(file).then((img) => b.run(api.updateProfile({ data: { avatarUrl: dataUrl(img.mime, img.data) } }))).then(() => b.refresh()).catch((err) => b.toastMsg(err instanceof Error ? err.message : "Could not use that photo."));
+            if (!b.me) return;
+            void uploadUserMedia("banter-avatars", b.me.userId, file, 5 * 1024 * 1024)
+              .then((path) => requireSupabase().storage.from("banter-avatars").getPublicUrl(path).data.publicUrl)
+              .then((avatarUrl) => b.run(api.updateProfile({ data: { avatarUrl } })))
+              .then((res) => { if (res) void b.refresh(); })
+              .catch((err) => b.toastMsg(err instanceof Error ? err.message : "Could not use that photo."));
           }} />
         </Field>
         <Field label="Name"><input className={inputClass} value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} /></Field>

@@ -9,7 +9,9 @@ This file tracks the migration from the original TanStack Start + Better Auth se
 - Edge Function `banter-api` is deployed at version 14 with JWT verification enabled.
 - The Edge Function implements 39 action handlers covering the former server API operations.
 - `src/lib/banter/api.ts` now exposes all 41 original API exports without `createServerFn`; 39 call the Edge Function and the two session operations use Supabase Auth directly.
-- The API module no longer imports the old SQL/Better Auth server stack.
+- The API module no longer imports the old SQL/Better Auth server stack; the obsolete `/api/auth/*` route has been deleted.
+- Vite is now configured for TanStack Start SPA mode, with a configurable base path for GitHub Pages and local Capacitor assets. The old Vercel Nitro preset and local PGlite bootstrap were removed from the Vite config.
+- GitHub Pages now builds the app source instead of publishing the old `docs` preview. The Android workflow now builds from local web assets and no longer sets `server.url`.
 - Database-only security-definer routines are in the non-exposed `private` schema, called through authenticated invoker wrappers in `public`.
 - Important parity limitations remain: session listing currently shows only this device (not every active session); cross-user notifications are not yet delivered by the new Edge Function; reverse-block visibility needs a secure helper; group-admin pinning of another member's message is not yet supported; and media still needs migration from base64 message fields to the configured Storage buckets.
 - The migration has not passed end-to-end multi-user tests. A deployed action is not automatically considered feature-complete until it is tested.
@@ -20,9 +22,10 @@ This file tracks the migration from the original TanStack Start + Better Auth se
 
 ## Required release gates
 
-1. Migrate and test every operation, preserving authorization, validation, rate limits, and response shapes.
-2. Replace Better Auth with Supabase Auth throughout sign-in, sign-up, session restore, and sign-out.
-3. Verify all table and Storage RLS policies against multi-user scenarios.
-4. Remove server-only imports and build a static web bundle for GitHub Pages.
-5. Configure Capacitor to bundle the generated local assets (no `server.url`).
-6. Build a debug APK with GitHub Actions and install/test it on Android before calling it ready.
+1. Run a successful production build and resolve any generated route-tree or static-prerender issues.
+2. Verify sign-up confirmation, sign-in, session restore, and global sign-out with real Supabase test accounts.
+3. Test all Edge Function actions against at least two users, including blocked-user and group-membership cases.
+4. Complete feature parity for cross-user notifications, reverse-block checks, group-admin message pinning, media Storage uploads, and full session listing.
+5. Verify all table and Storage RLS policies against multi-user scenarios.
+6. Confirm GitHub Pages serves the built app and all deep links correctly.
+7. Build a debug APK with GitHub Actions from bundled local assets, then install and test it on Android before calling it ready.

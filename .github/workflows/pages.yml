@@ -1,11 +1,16 @@
-name: Deploy BANTER project preview to GitHub Pages
+name: Deploy BANTER to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
-      - 'docs/**'
-      - '.github/workflows/pages.yml'
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - "tsconfig.json"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -26,12 +31,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build static BANTER site
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /BANTER/
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+      - name: Prepare GitHub Pages fallback
+        id: site
+        run: |
+          if [ -f dist/index.html ]; then
+            SITE_DIR=dist
+          elif [ -f dist/client/index.html ]; then
+            SITE_DIR=dist/client
+          else
+            echo "Static index.html was not produced."
+            find dist -maxdepth 3 -type f | head -80
+            exit 1
+          fi
+          cp "$SITE_DIR/index.html" "$SITE_DIR/404.html"
+          echo "dir=$SITE_DIR" >> "$GITHUB_OUTPUT"
       - name: Configure Pages
         uses: actions/configure-pages@v5
-      - name: Upload preview site
+      - name: Upload site
         uses: actions/upload-pages-artifact@v4
         with:
-          path: docs
-      - name: Deploy to GitHub Pages
+          path: ${{ steps.site.outputs.dir }}
+      - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

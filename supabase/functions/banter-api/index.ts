@@ -27,6 +27,78 @@ Deno.serve(async(req:Request)=>{
  const parseSocials=(v:unknown)=>{if(typeof v!=="string")return [];try{const x=JSON.parse(v);return Array.isArray(x)?x.filter(y=>y&&typeof y.label==="string"&&typeof y.url==="string").slice(0,8):[]}catch{return []}};
  const mapMe=(p:Record<string,any>)=>({userId:p.user_id,username:p.username,displayName:p.display_name,bio:p.bio,about:p.about,avatarUrl:p.avatar_url,birthday:p.birthday,location:p.location,interests:parseList(p.interests),hobbies:p.hobbies,socials:parseSocials(p.socials),discoverability:p.discoverability,lastSeenVisibility:p.last_seen_visibility,showOnline:p.show_online,readReceipts:p.read_receipts,theme:p.theme==="light"?"light":"dark",status:p.status,role:p.role==="admin"?"admin":"user",onboardingComplete:p.onboarding_complete,notifyMessages:p.notify_messages,notifyFriends:p.notify_friends,notifyStories:p.notify_stories,lastSeenAt:p.last_seen_at,usernameChangedAt:p.username_changed_at,createdAt:p.created_at,email:user.email??""});
  const mapPublic=(p:Record<string,any>,rel:string,mine:string[])=>({userId:p.user_id,username:p.username,displayName:p.status==="deactivated"?"Deactivated account":p.display_name,bio:p.status==="active"?p.bio:"",about:rel==="friends"&&p.status==="active"?p.about:"",avatarUrl:p.status==="active"?p.avatar_url:null,interests:p.status==="active"?parseList(p.interests):[],hobbies:rel==="friends"?p.hobbies:"",location:rel==="friends"?p.location:"",birthday:rel==="friends"?p.birthday:null,socials:rel==="friends"?parseSocials(p.socials):[],createdAt:p.created_at,relationship:rel,sharedInterests:parseList(p.interests).filter(x=>mine.includes(x)),online:!!p.show_online&&p.status==="active"&&!!p.last_seen_at&&Date.now()-new Date(p.last_seen_at).getTime()<45000,lastSeenAt:p.last_seen_visibility==="nobody"||p.last_seen_visibility==="friends"&&rel!=="friends"?null:p.last_seen_at,canMessage:rel==="friends"&&p.status==="active"});
+
+ const adminAction=String(body.action??"");
+ if(adminAction.startsWith("admin_")){
+  const caller=await profile(user.id);
+  if(caller?.role!=="admin")return reply(403,{ok:false,error:"Admin access required."});
+  const serviceKey=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if(!serviceKey)return reply(503,{ok:false,error:"Admin service is not configured."});
+  const root=createClient(url,serviceKey,{auth:{persistSession:false,autoRefreshToken:false}});
+  const reason=typeof d.reason==="string"?d.reason.trim().slice(0,500):"";
+  if(adminAction==="admin_list_users"){
+   const q=typeof d.q==="string"?d.q.trim().slice(0,80):"";
+   let query=root.from("profiles").select("user_id,username,display_name,avatar_url,status,role,created_at,onboarding_complete",{count:"exact"}).order("created_at",{ascending:false}).limit(200);
+   if(q)query=query.or("username.ilike.%"+q.replace(/[%,()]/g,"")+"%,display_name.ilike.%"+q.replace(/[%,()]/g,"")+"%");
+   const [users,total,suspended]=await Promise.all([query,root.from("profiles").select("user_id",{count:"exact",head:true}),root.from("profiles").select("user_id",{count:"exact",head:true}).eq("status","suspended")]);
+   if(users.error||total.error||suspended.error)return reply(400,{ok:false,error:"Could not load admin data."});
+   const logs=await root.from("admin_audit_log").select("id,actor_user_id,target_user_id,action,reason,created_at").order("created_at",{ascending:false}).limit(20);
+   return reply(200,{ok:true,users:users.data??[],total:total.count??0,suspended:suspended.count??0,audit:logs.data??[]});
+  }
+  const target=typeof d.userId==="string"?d.userId:"";
+  if(!target||target===user.id)return reply(400,{ok:false,error:"Choose a different account."});
+  const targetProfile=await root.from("profiles").select("user_id,role,status,display_name").eq("user_id",target).maybeSingle();
+  if(!targetProfile.data)return reply(404,{ok:false,error:"Account not found."});
+  if(targetProfile.data.role==="admin")return reply(403,{ok:false,error:"Admin accounts are protected from moderation actions."});
+  if(adminAction==="admin_ban_user"){
+   const authBan=await root.auth.admin.updateUserById(target,{ban_duration:"876000h"});
+   if(authBan.error)return reply(400,{ok:false,error:"Could not apply the sign-in ban."});
+   const update=await root.from("profiles").update({status:"suspended",show_online:false,discoverability:"nobody"}).eq("user_id",target);
+   if(update.error)return reply(400,{ok:false,error:"Sign-in is blocked, but the profile status could not be updated."});
+   await root.from("admin_audit_log").insert({actor_user_id:user.id,target_user_id:target,action:"permanent_ban",reason});
+   return reply(200,{ok:true,message:"Account permanently banned."});
+  }
+  if(adminAction==="admin_restore_user"){
+   const authRestore=await root.auth.admin.updateUserById(target,{ban_duration:"none"});
+   if(authRestore.error)return reply(400,{ok:false,error:"Could not restore sign-in access."});
+   const update=await root.from("profiles").update({status:"active"}).eq("user_id",target);
+   if(update.error)return reply(400,{ok:false,error:"Could not restore the profile."});
+   await root.from("admin_audit_log").insert({actor_user_id:user.id,target_user_id:target,action:"restore_account",reason});
+   return reply(200,{ok:true,message:"Account restored."});
+  }
+  if(adminAction==="admin_delete_user"){
+   if(d.confirmation!== "DELETE")return reply(400,{ok:false,error:"Type DELETE to confirm permanent removal."});
+   await root.from("messages").delete().eq("sender_id",target);
+   await root.from("stories").delete().eq("user_id",target);
+   await root.from("story_reactions").delete().eq("user_id",target);
+   await root.from("notifications").delete().eq("user_id",target);
+   await root.from("friend_requests").delete().or("from_user_id.eq."+target+",to_user_id.eq."+target);
+   await root.from("friendships").delete().or("user_a.eq."+target+",user_b.eq."+target);
+   await root.from("blocks").delete().or("blocker_id.eq."+target+",blocked_id.eq."+target);
+   await root.from("typing").delete().eq("user_id",target);
+   await root.from("rate_events").delete().eq("user_id",target);
+   await root.from("invites").update({revoked_at:new Date().toISOString()}).eq("created_by",target);
+   const callRows=await root.from("calls").select("id").or("caller_id.eq."+target+",callee_id.eq."+target);
+   const callIds=(callRows.data??[]).map(x=>x.id);
+   if(callIds.length)await root.from("call_signals").delete().in("call_id",callIds);
+   await root.from("calls").delete().or("caller_id.eq."+target+",callee_id.eq."+target);
+   await root.from("conversation_members").delete().eq("user_id",target);
+   const tomb=root.from("account_tombstones").upsert({user_id:target},{onConflict:"user_id"});
+   const tombResult=await tomb;
+   if(tombResult.error)return reply(400,{ok:false,error:"Could not create the account removal record."});
+   for(const bucket of ["banter-avatars","banter-story-media"]){
+    const listed=await root.storage.from(bucket).list(target,{limit:1000});
+    const names=(listed.data??[]).map(x=>target+"/"+x.name);
+    if(names.length)await root.storage.from(bucket).remove(names);
+   }
+   await root.from("profiles").delete().eq("user_id",target);
+   await root.from("admin_audit_log").insert({actor_user_id:user.id,target_user_id:target,action:"permanent_delete",reason});
+   const deleted=await root.auth.admin.deleteUser(target);
+   if(deleted.error)return reply(400,{ok:false,error:"App data was removed, but the authentication account could not be deleted. Contact support."});
+   return reply(200,{ok:true,message:"Account permanently deleted."});
+  }
+  return reply(404,{ok:false,error:"Unknown admin action."});
+ }
  const relationship=async(other:string)=>{if(await isBlocked(user.id,other))return "blocked";if(await areFriends(user.id,other))return "friends";const r=await db.from("friend_requests").select("from_user_id").eq("status","pending").or(`and(from_user_id.eq.${user.id},to_user_id.eq.${other}),and(from_user_id.eq.${other},to_user_id.eq.${user.id})`).limit(1);if(!r.data?.length)return "none";return r.data[0].from_user_id===user.id?"pending-out":"pending-in"};
  if(body.action==="search_people"){
   const me=await profile(user.id);if(!me?.onboarding_complete)return reply(403,{ok:false,error:"Finish your profile first."});const q=(typeof d.q==="string"?d.q:"").trim().toLowerCase().replace(/^@/,"").replace(/[\\%_]/g,"");if(q.length<2)return reply(200,{ok:true,people:[]});

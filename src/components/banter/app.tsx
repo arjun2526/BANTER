@@ -682,29 +682,38 @@ function StoryViewer({ userId }: { userId: string }) {
   }, [userId]);
   const item = items[index];
   useEffect(() => {
-    if (!item?.hasMedia) { setMedia(null); return; }
+    let live = true;
+    setMedia(null);
+    if (!item?.hasMedia) return () => { live = false; };
     void api.storyMedia({ data: { storyId: item.id } }).then((res) => {
+      if (!live) return;
       if (!res.ok) { b.toastMsg(res.error ?? "Could not load story media."); return; }
       setMedia(res.url ? { url: res.url, mime: res.mime ?? item.mediaMime ?? "" } : { url: dataUrl(item.mediaMime ?? "image/jpeg", res.data), mime: item.mediaMime ?? "image/jpeg" });
     });
+    return () => { live = false; };
   }, [item?.id, item?.hasMedia]);
   if (!item) return <div className="p-6"><TopBar title="Story" onBack={b.back} /><p className="mt-4 text-sm text-muted">Nothing live right now.</p></div>;
+  const own = userId === b.me?.userId;
   return (
-    <div className={`story-${item.bg} flex h-full flex-col`}>
-      <TopBar title="Story" subtitle={when(item.createdAt)} onBack={b.back} />
-      <div className="flex flex-1 flex-col justify-end p-5">
-        {media ? (media.mime.startsWith("video/") ? <video src={media.url} controls playsInline className="mb-4 max-h-[50vh] w-full rounded-3xl object-contain" /> : <img src={media.url} alt="" className="mb-4 max-h-[50vh] rounded-3xl object-cover" />) : null}
-        <p className="font-display text-4xl">{item.body}</p>
-        {userId === b.me?.userId ? <p className="mt-3 text-sm opacity-80">{item.views} views</p> : null}
-        <div className="mt-4 flex gap-2">
-          {REACTIONS.map((emoji) => (
-            <button key={emoji} type="button" className="grid size-11 place-items-center rounded-full bg-black/20" onClick={() => void api.reactStory({ data: { storyId: item.id, emoji } })}>{emoji}</button>
-          ))}
-        </div>
-        <div className="mt-4 flex gap-2">
-          {index > 0 ? <Btn tone="ghost" onClick={() => setIndex(index - 1)}>Previous</Btn> : null}
-          {index < items.length - 1 ? <Btn tone="ghost" onClick={() => setIndex(index + 1)}>Next</Btn> : null}
-          {userId === b.me?.userId ? <Btn tone="danger" onClick={() => void b.run(api.deleteStory({ data: { storyId: item.id } })).then(() => b.back())}>Delete</Btn> : null}
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[#090909] text-white">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex gap-1 px-3 pt-3">{items.map((story, i) => <span key={story.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30"><span className={`block h-full rounded-full ${i <= index ? "bg-white" : "bg-transparent"}`} /></span>)}</div>
+      <div className="absolute inset-x-0 top-6 z-20 flex items-center gap-3 px-4 py-3">
+        <Avatar name={own ? b.me?.displayName ?? "You" : b.people?.friends.find((p) => p.userId === userId)?.displayName ?? "Friend"} url={own ? b.me?.avatarUrl : b.people?.friends.find((p) => p.userId === userId)?.avatarUrl} className="size-9" />
+        <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{own ? "Your story" : b.people?.friends.find((p) => p.userId === userId)?.displayName ?? "Friend"}</p><p className="text-[11px] text-white/70">{when(item.createdAt)}</p></div>
+        <button type="button" onClick={b.back} className="grid size-9 place-items-center rounded-full bg-black/30 text-xl" aria-label="Close story">×</button>
+      </div>
+      <div className="relative flex min-h-0 flex-1 items-center justify-center pt-16">
+        <button type="button" aria-label="Previous story" className="absolute inset-y-0 left-0 z-10 w-1/3" onClick={() => setIndex((i) => Math.max(0, i - 1))} />
+        <button type="button" aria-label="Next story" className="absolute inset-y-0 right-0 z-10 w-2/3" onClick={() => setIndex((i) => Math.min(items.length - 1, i + 1))} />
+        {media ? (media.mime.startsWith("video/") ? <video key={media.url} src={media.url} autoPlay controls playsInline className="h-full max-h-full w-full object-contain" /> : <img src={media.url} alt="" className="h-full max-h-full w-full object-contain" />) : <div className={`story-${item.bg} flex h-full w-full items-center justify-center px-8 text-center`}><p className="font-display text-4xl leading-tight break-words">{item.body || " "}</p></div>}
+        {media && item.body ? <div className="pointer-events-none absolute inset-x-5 bottom-5 z-10 rounded-2xl bg-black/45 p-3 text-center text-lg">{item.body}</div> : null}
+      </div>
+      <div className="relative z-20 flex items-center justify-between gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        {own ? <span className="text-xs text-white/75">{item.views} views</span> : <div className="flex gap-1">{REACTIONS.slice(0,5).map((emoji) => <button key={emoji} type="button" className="grid size-10 place-items-center rounded-full bg-white/10 text-lg" onClick={() => void api.reactStory({ data: { storyId: item.id, emoji } })}>{emoji}</button>)}</div>}
+        <div className="flex items-center gap-2">
+          {index > 0 ? <button type="button" className="rounded-full bg-white/10 px-3 py-2 text-xs" onClick={() => setIndex(index - 1)}>Back</button> : null}
+          {index < items.length - 1 ? <button type="button" className="rounded-full bg-white/15 px-3 py-2 text-xs" onClick={() => setIndex(index + 1)}>Next</button> : null}
+          {own ? <button type="button" className="rounded-full bg-red-500/80 px-3 py-2 text-xs" onClick={() => void b.run(api.deleteStory({ data: { storyId: item.id } })).then((res) => { if (res) { setItems((list) => list.filter((x) => x.id !== item.id)); setIndex((i) => Math.max(0, Math.min(i, items.length - 2))); } })}>Delete</button> : null}
         </div>
       </div>
     </div>
@@ -822,18 +831,20 @@ function EditProfile() {
           }
         });
       }}>
-        <Field label="Photo">
-          <input type="file" accept="image/*" onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            if (!b.me) return;
-            void uploadUserMedia("banter-avatars", b.me.userId, file, 5 * 1024 * 1024)
-              .then((path) => requireSupabase().storage.from("banter-avatars").getPublicUrl(path).data.publicUrl)
-              .then((avatarUrl) => b.run(api.updateProfile({ data: { avatarUrl } })))
-              .then((res) => { if (res) void b.refresh(); })
-              .catch((err) => b.toastMsg(err instanceof Error ? err.message : "Could not use that photo."));
-          }} />
-        </Field>
+        <div className="rounded-3xl border border-line bg-elev p-4">
+          <div className="flex items-center gap-4">
+            <Avatar name={me.displayName} url={me.avatarUrl} className="size-16 text-xl" />
+            <div className="min-w-0 flex-1"><p className="font-medium">Profile photo</p><p className="text-xs text-muted">JPG, PNG or WebP · up to 5 MB</p><label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-full bg-clay px-3 py-2 text-xs font-semibold text-on-clay"><ImagePlus className="size-4" /> Change photo<input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => {
+              const file = e.target.files?.[0]; if (!file || !b.me) return;
+              void uploadUserMedia("banter-avatars", b.me.userId, file, 5 * 1024 * 1024)
+                .then((path) => requireSupabase().storage.from("banter-avatars").getPublicUrl(path).data.publicUrl)
+                .then((avatarUrl) => b.run(api.updateProfile({ data: { avatarUrl } })))
+                .then((res) => { if (res) void b.refresh(); })
+                .catch((err) => b.toastMsg(err instanceof Error ? err.message : "Could not use that photo."));
+              e.target.value = "";
+            }} /></label></div>
+          </div>
+        </div>
         <Field label="Name"><input className={inputClass} value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} /></Field>
         <Field label="Banter ID">
           <input className={inputClass} value={form.username} onChange={(e) => { setForm({ ...form, username: e.target.value }); setAvailable(null); }} />

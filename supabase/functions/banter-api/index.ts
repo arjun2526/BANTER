@@ -83,6 +83,28 @@ Deno.serve(async(req:Request)=>{
  if(body.action==="open_direct"){
   const other=typeof d.userId==="string"?d.userId:"";if(!other||other===user.id)return reply(400,{ok:false,error:"Choose a friend."});const r=await db.rpc("banter_open_direct",{p_other:other});if(r.error)return reply(400,{ok:false,error:r.error.message||"Could not open conversation."});return reply(200,{ok:true,conversationId:r.data});
  }
+
+ if(body.action==="delete_account"){
+  const now=new Date().toISOString();
+  await db.from("messages").update({body:"",media_data:null,media_mime:null,media_name:null,deleted_at:now,pinned:false}).eq("sender_id",user.id);
+  await db.from("stories").delete().eq("user_id",user.id);
+  await db.from("notifications").delete().eq("user_id",user.id);
+  await db.from("friend_requests").delete().or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`);
+  await db.from("friendships").delete().or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+  await db.from("blocks").delete().eq("blocker_id",user.id);
+  await db.from("invites").update({revoked_at:now}).eq("created_by",user.id).is("revoked_at",null);
+  await db.from("conversation_members").update({left_at:now}).eq("user_id",user.id).is("left_at",null);
+  await db.from("typing").delete().eq("user_id",user.id);
+  const p=await db.from("profiles").update({status:"deactivated",onboarding_complete:false,username:null,display_name:"Deleted member",bio:"",about:"",avatar_url:null,interests:"[]",hobbies:"",location:"",birthday:null,socials:"[]",last_seen_at:null}).eq("user_id",user.id);
+  if(p.error)return reply(400,{ok:false,error:"Could not close your account."});
+  const t=await db.from("account_tombstones").upsert({user_id:user.id},{onConflict:"user_id"});if(t.error)return reply(400,{ok:false,error:"Could not finish account closure."});return reply(200,{ok:true});
+ }
+ if(body.action==="start_over"){
+  await db.from("account_tombstones").delete().eq("user_id",user.id);
+  const metadata=user.user_metadata??{};const name=cleanName(metadata.display_name)||cleanName(metadata.name)||"New member";const image=typeof metadata.avatar_url==="string"&&metadata.avatar_url.startsWith("https://")?metadata.avatar_url:null;
+  const p=await db.from("profiles").update({display_name:name,avatar_url:image,status:"active",onboarding_complete:false,username:null,bio:"",about:"",interests:"[]",hobbies:"",location:"",birthday:null,socials:"[]",last_seen_at:new Date().toISOString()}).eq("user_id",user.id).select("*").maybeSingle();
+  if(p.error||!p.data)return reply(400,{ok:false,error:"Could not start a new profile."});return reply(200,{ok:true,me:mapMe(p.data)});
+ }
  if(body.action==="set_account_status"){
   const status=d.status;if(!["active","deactivated"].includes(String(status)))return reply(400,{ok:false,error:"Invalid account status."});
   const p=await profile(user.id);if(!p)return reply(400,{ok:false,error:"Profile missing."});if(p.status==="suspended")return reply(403,{ok:false,error:"Suspended accounts cannot reactivate themselves."});

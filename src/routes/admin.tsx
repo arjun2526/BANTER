@@ -38,7 +38,7 @@ function AdminPage() {
   const callAdmin = useCallback(async (action: string, payload: Record<string, unknown> = {}) => {
     if (!supabase) throw new Error("BANTER is not configured.");
     const { data: result, error } = await supabase.functions.invoke("banter-api", { body: { action, data: payload } });
-    if (error) throw new Error(error.message || "Admin request failed.");
+    if (error) { const status = (error as { context?: { status?: number } }).context?.status; throw new Error(status === 403 ? "ADMIN_ACCESS_DENIED" : error.message || "Admin request failed."); }
     const response = result as ApiResult;
     if (!response?.ok) throw new Error(response?.error || "Admin request failed.");
     return response;
@@ -61,7 +61,7 @@ function AdminPage() {
       setSignedOut(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not load admin dashboard.";
-      if (/admin access|required|403/i.test(message)) setDenied(true);
+      if (/admin access|required|403|ADMIN_ACCESS_DENIED/i.test(message)) setDenied(true);
       else setNotice(message);
     } finally {
       setLoading(false);

@@ -17,9 +17,9 @@ Deno.serve(async(req:Request)=>{
  const profile=async(id:string)=>{const r=await db.from("profiles").select("*").eq("user_id",id).maybeSingle();return r.data??null};
  const pair=(a:string,b:string)=>a<b?[a,b]:[b,a];
  const areFriends=async(a:string,b:string)=>{const [x,y]=pair(a,b);const r=await db.from("friendships").select("user_a").eq("user_a",x).eq("user_b",y).maybeSingle();return !!r.data};
- const isBlocked=async(a:string,b:string)=>{const r=await db.from("blocks").select("blocker_id").or(`and(blocker_id.eq.${a},blocked_id.eq.${b}),and(blocker_id.eq.${b},blocked_id.eq.${a})`).limit(1);return !!r.data?.length};
+ const isBlocked=async(_a:string,b:string)=>{const r=await db.rpc("banter_is_blocked",{p_other:b});return !!r.data};
  const roleFor=async(cid:string,uid:string)=>{const r=await db.from("conversation_members").select("role").eq("conversation_id",cid).eq("user_id",uid).is("left_at",null).maybeSingle();return r.data?.role??null};
- const notify=async(uid:string,kind:string,title:string,message:string,href:string)=>{await db.from("notifications").insert({id:crypto.randomUUID(),user_id:uid,kind,title,body:message,href})};
+ const notify=async(uid:string,kind:string,title:string,message:string,href:string)=>{await db.rpc("banter_notify",{p_user_id:uid,p_kind:kind,p_title:title,p_body:message,p_href:href})};
  const rateAllowed=async(action:string,limit:number,windowMs:number)=>{const cutoff=new Date(Date.now()-windowMs).toISOString();const q=await db.from("rate_events").select("id",{count:"exact",head:true}).eq("user_id",user.id).eq("action",action).gt("created_at",cutoff);if((q.count??0)>=limit)return false;const ins=await db.from("rate_events").insert({user_id:user.id,action});return !ins.error};
  const active=async()=>{const p=await profile(user.id);if(!p)return {p:null,error:"Profile missing."};if(!p.onboarding_complete)return {p,error:"Finish setting up your Banter profile first."};if(p.status==="suspended")return {p,error:"This account is suspended."};if(p.status==="deactivated")return {p,error:"Reactivate your account to do that."};if(p.status!=="active")return {p,error:"This account is not active."};return {p,error:null as string|null}};
 

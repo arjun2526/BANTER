@@ -21,10 +21,12 @@ export function AuthScreen() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     if (!email.includes("@") || password.length < 8) {
       setError("Use a real email and a password of at least 8 characters.");
       return;
@@ -45,6 +47,7 @@ export function AuthScreen() {
           });
     setBusy(false);
     if (result.error) setError(result.error.message || "Could not sign in.");
+    else if (mode === "up" && "needsEmailConfirmation" in result && result.needsEmailConfirmation) setNotice("Check your email for a confirmation link, then come back and sign in.");
   }
 
   return (
@@ -75,11 +78,12 @@ export function AuthScreen() {
               <input className={inputClass} type="password" autoComplete={mode === "up" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
             </Field>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
+            {notice ? <p className="text-sm text-muted">{notice}</p> : null}
             <Btn type="submit" className="w-full" disabled={busy}>
               {busy ? "Working…" : mode === "up" ? "Create account" : "Sign in"}
             </Btn>
           </form>
-          <button type="button" className="text-sm text-apricot" onClick={() => { setMode(mode === "up" ? "in" : "up"); setError(null); }}>
+          <button type="button" className="text-sm text-apricot" onClick={() => { setMode(mode === "up" ? "in" : "up"); setError(null); setNotice(null); }}>
             {mode === "up" ? "Already have an account? Sign in" : "New here? Create an account"}
           </button>
         </div>

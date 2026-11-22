@@ -13,6 +13,74 @@ Deno.serve(async(req:Request)=>{
  if(authError||!user)return reply(401,{ok:false,error:"Your session is invalid. Sign in again."});
  let body:{action?:string;data?:Record<string,unknown>};try{body=await req.json()}catch{return reply(400,{ok:false,error:"Invalid request body."})}
  const d=body.data??{};
+
+ const profile=async(id:string)=>{const r=await db.from("profiles").select("*").eq("user_id",id).maybeSingle();return r.data??null};
+ const pair=(a:string,b:string)=>a<b?[a,b]:[b,a];
+ const areFriends=async(a:string,b:string)=>{const [x,y]=pair(a,b);const r=await db.from("friendships").select("user_a").eq("user_a",x).eq("user_b",y).maybeSingle();return !!r.data};
+ const isBlocked=async(a:string,b:string)=>{const r=await db.from("blocks").select("blocker_id").or(`and(blocker_id.eq.${a},blocked_id.eq.${b}),and(blocker_id.eq.${b},blocked_id.eq.${a})`).limit(1);return !!r.data?.length};
+ const roleFor=async(cid:string,uid:string)=>{const r=await db.from("conversation_members").select("role").eq("conversation_id",cid).eq("user_id",uid).is("left_at",null).maybeSingle();return r.data?.role??null};
+ const notify=async(uid:string,kind:string,title:string,message:string,href:string)=>{await db.from("notifications").insert({id:crypto.randomUUID(),user_id:uid,kind,title,body:message,href})};
+ const rateAllowed=async(action:string,limit:number,windowMs:number)=>{const cutoff=new Date(Date.now()-windowMs).toISOString();const q=await db.from("rate_events").select("id",{count:"exact",head:true}).eq("user_id",user.id).eq("action",action).gt("created_at",cutoff);if((q.count??0)>=limit)return false;const ins=await db.from("rate_events").insert({user_id:user.id,action});return !ins.error};
+ const active=async()=>{const p=await profile(user.id);if(!p)return {p:null,error:"Profile missing."};if(!p.onboarding_complete)return {p,error:"Finish setting up your Banter profile first."};if(p.status==="suspended")return {p,error:"This account is suspended."};if(p.status==="deactivated")return {p,error:"Reactivate your account to do that."};if(p.status!=="active")return {p,error:"This account is not active."};return {p,error:null as string|null}};
+ if(body.action==="set_account_status"){
+  const status=d.status;if(!["active","deactivated"].includes(String(status)))return reply(400,{ok:false,error:"Invalid account status."});
+  const p=await profile(user.id);if(!p)return reply(400,{ok:false,error:"Profile missing."});if(p.status==="suspended")return reply(403,{ok:false,error:"Suspended accounts cannot reactivate themselves."});
+  const r=await db.from("profiles").update({status}).eq("user_id",user.id);if(r.error)return reply(400,{ok:false,error:"Could not update account status."});return reply(200,{ok:true});
+ }
+ if(body.action==="appeal"){
+  const p=await profile(user.id),message=typeof d.body==="string"?d.body.trim():"";if(!p||p.status!=="suspended")return reply(400,{ok:false,error:"Appeals are for suspended accounts."});if(message.length<8||message.length>800)return reply(400,{ok:false,error:"Appeal must be 8–800 characters."});if(!await rateAllowed("appeal",3,86400000))return reply(429,{ok:false,error:"You already sent an appeal recently."});
+  const r=await db.from("appeals").insert({id:crypto.randomUUID(),user_id:user.id,body:message});if(r.error)return reply(400,{ok:false,error:"Could not submit appeal."});return reply(200,{ok:true});
+ }
+ if(body.action==="report_person"){
+  const gate=await active();if(gate.error)return reply(403,{ok:false,error:gate.error});const reason=typeof d.reason==="string"?d.reason.trim():"",details=typeof d.details==="string"?d.details.trim().slice(0,500):"";if(reason.length<3||reason.length>80||(!d.userId&&!d.conversationId))return reply(400,{ok:false,error:"Enter a valid report."});if(!await rateAllowed("report",10,86400000))return reply(429,{ok:false,error:"You've sent several reports. Try again tomorrow."});
+  const r=await db.from("reports").insert({id:crypto.randomUUID(),reporter_id:user.id,target_user_id:typeof d.userId==="string"?d.userId:null,target_conversation_id:typeof d.conversationId==="string"?d.conversationId:null,reason,details});if(r.error)return reply(400,{ok:false,error:"Could not submit report."});return reply(200,{ok:true});
+ }
+ if(body.action==="mark_notices"){
+  let q=db.from("notifications").update({read_at:new Date().toISOString()}).eq("user_id",user.id);if(typeof d.id==="string")q=q.eq("id",d.id);else q=q.is("read_at",null);const r=await q;if(r.error)return reply(400,{ok:false,error:"Could not update notifications."});return reply(200,{ok:true});
+ }
+ if(body.action==="pulse_typing"){
+  if(typeof d.conversationId!=="string"||typeof d.typing!=="boolean")return reply(400,{ok:false,error:"Invalid typing update."});if(!await roleFor(d.conversationId,user.id))return reply(403,{ok:false,error:"Not a member."});
+  const r=d.typing?await db.from("typing").upsert({conversation_id:d.conversationId,user_id:user.id,updated_at:new Date().toISOString()}):await db.from("typing").delete().eq("conversation_id",d.conversationId).eq("user_id",user.id);if(r.error)return reply(400,{ok:false,error:"Could not update typing status."});return reply(200,{ok:true});
+ }
+ if(body.action==="post_story"){
+  const gate=await active();if(gate.error)return reply(403,{ok:false,error:gate.error});const kind=d.kind,bodyText=typeof d.body==="string"?d.body.trim():"";if(!["text","image"].includes(String(kind)))return reply(400,{ok:false,error:"Invalid story type."});if(!await rateAllowed("story",12,86400000))return reply(429,{ok:false,error:"Story limit for today reached."});
+  let media:string|null=null;if(kind==="image"){const raw=typeof d.mediaData==="string"?d.mediaData.replace(/^data:image\\/(jpeg|png|webp);base64,/,""):"";if(!["image/jpeg","image/png","image/webp"].includes(String(d.mediaMime))||!raw||Math.floor(raw.length*.75)>380000)return reply(400,{ok:false,error:"Use a JPG, PNG, or WebP under 380 KB."});media=raw}else if(!bodyText||bodyText.length>240)return reply(400,{ok:false,error:"Write a status up to 240 characters."});
+  const id=crypto.randomUUID(),expires=new Date(Date.now()+86400000).toISOString();const r=await db.from("stories").insert({id,user_id:user.id,kind,body:bodyText,media_data:media,bg:["clay","ink","sage","dusk","apricot"].includes(String(d.bg))?d.bg:"clay",expires_at:expires});if(r.error)return reply(400,{ok:false,error:"Could not post story."});return reply(200,{ok:true,id});
+ }
+ if(body.action==="stories_for"){
+  if(typeof d.userId!=="string")return reply(400,{ok:false,error:"Choose a profile."});if(d.userId!==user.id&&!await areFriends(user.id,d.userId))return reply(403,{ok:false,error:"Stories are visible to friends."});
+  const r=await db.from("stories").select("id,kind,body,bg,created_at,expires_at,media_data").eq("user_id",d.userId).gt("expires_at",new Date().toISOString()).order("created_at",{ascending:true});if(r.error)return reply(400,{ok:false,error:"Could not load stories."});
+  const ids=(r.data??[]).map(x=>x.id);if(d.userId!==user.id&&ids.length)await db.from("story_views").upsert(ids.map(story_id=>({story_id,viewer_id:user.id})),{onConflict:"story_id,viewer_id",ignoreDuplicates:true});
+  const views=ids.length?await db.from("story_views").select("story_id").in("story_id",ids):{data:[]};const reactions=ids.length?await db.from("story_reactions").select("story_id,emoji").in("story_id",ids):{data:[]};
+  return reply(200,{ok:true,stories:(r.data??[]).map(x=>({id:x.id,kind:x.kind,body:x.body,bg:x.bg,hasMedia:!!x.media_data,createdAt:x.created_at,expiresAt:x.expires_at,views:d.userId===user.id?(views.data??[]).filter(v=>v.story_id===x.id).length:0,reactions:[...new Set((reactions.data??[]).filter(v=>v.story_id===x.id).map(v=>v.emoji))].map(emoji=>({emoji,count:(reactions.data??[]).filter(v=>v.story_id===x.id&&v.emoji===emoji).length}))}))});
+ }
+ if(body.action==="story_media"){
+  if(typeof d.storyId!=="string")return reply(400,{ok:false,error:"Story unavailable."});const r=await db.from("stories").select("user_id,media_data").eq("id",d.storyId).gt("expires_at",new Date().toISOString()).maybeSingle();if(!r.data?.media_data)return reply(404,{ok:false,error:"Story unavailable."});if(r.data.user_id!==user.id&&!await areFriends(user.id,r.data.user_id))return reply(403,{ok:false,error:"Stories are visible to friends."});return reply(200,{ok:true,data:r.data.media_data});
+ }
+ if(body.action==="react_story"){
+  if(typeof d.storyId!=="string"||!["♥","☺","!","…","✦","↑"].includes(String(d.emoji)))return reply(400,{ok:false,error:"That reaction is not available."});const story=await db.from("stories").select("user_id").eq("id",d.storyId).gt("expires_at",new Date().toISOString()).maybeSingle();const owner=story.data?.user_id;if(!owner)return reply(404,{ok:false,error:"Story unavailable."});if(owner!==user.id&&!await areFriends(user.id,owner))return reply(403,{ok:false,error:"Not available."});const r=await db.from("story_reactions").upsert({story_id:d.storyId,user_id:user.id,emoji:d.emoji},{onConflict:"story_id,user_id"});if(r.error)return reply(400,{ok:false,error:"Could not react to story."});if(owner!==user.id){const [op,mp]=await Promise.all([profile(owner),profile(user.id)]);if(op?.notify_stories&&mp)await notify(owner,"story","Story reaction",mp.display_name+" reacted to your story","story:"+owner)}return reply(200,{ok:true});
+ }
+ if(body.action==="delete_story"){
+  if(typeof d.storyId!=="string")return reply(400,{ok:false,error:"Story unavailable."});const r=await db.from("stories").delete().eq("id",d.storyId).eq("user_id",user.id);if(r.error)return reply(400,{ok:false,error:"Could not delete story."});return reply(200,{ok:true});
+ }
+ if(body.action==="start_call"){
+  const gate=await active();if(gate.error)return reply(403,{ok:false,error:gate.error});if(typeof d.userId!=="string"||!["voice","video"].includes(String(d.kind)))return reply(400,{ok:false,error:"Invalid call."});if(!await areFriends(user.id,d.userId))return reply(403,{ok:false,error:"You can call friends."});if(await isBlocked(user.id,d.userId))return reply(403,{ok:false,error:"You can't call this person."});if(!await rateAllowed("call",12,3600000))return reply(429,{ok:false,error:"Too many call attempts."});
+  const id=crypto.randomUUID();const r=await db.from("calls").insert({id,caller_id:user.id,callee_id:d.userId,kind:d.kind,status:"ringing"});if(r.error)return reply(400,{ok:false,error:"Could not start call."});const cp=await profile(d.userId);if(cp?.notify_messages)await notify(d.userId,"call",d.kind==="video"?"Incoming video call":"Incoming voice call",gate.p.display_name,"call:"+id);return reply(200,{ok:true,callId:id});
+ }
+ if(body.action==="call_action"){
+  if(typeof d.callId!=="string"||!["accept","decline","end","cancel"].includes(String(d.action)))return reply(400,{ok:false,error:"Invalid call action."});const q=await db.from("calls").select("caller_id,callee_id,status").eq("id",d.callId).maybeSingle();const c=q.data;if(!c)return reply(404,{ok:false,error:"Call not found."});if(c.caller_id!==user.id&&c.callee_id!==user.id)return reply(403,{ok:false,error:"Not your call."});
+  let patch:Record<string,unknown>={};if(d.action==="accept"){if(c.callee_id!==user.id)return reply(403,{ok:false,error:"Only the person called can answer."});patch={status:"active",started_at:new Date().toISOString()}}else if(d.action==="decline"){patch={status:"declined",ended_at:new Date().toISOString()};await notify(c.caller_id,"call","Call declined","They didn't pick up","calls")}else{patch={status:d.action==="cancel"?"missed":"ended",ended_at:new Date().toISOString()};if(d.action==="cancel")await notify(c.callee_id,"call","Missed call","You missed a call","calls")}
+  const u=await db.from("calls").update(patch).eq("id",d.callId);if(u.error)return reply(400,{ok:false,error:"Could not update call."});return reply(200,{ok:true,status:String(patch.status)});
+ }
+ if(body.action==="poll_call"){
+  if(typeof d.callId!=="string")return reply(400,{ok:false,error:"Invalid call."});const c=await db.from("calls").select("caller_id,callee_id,status,kind").eq("id",d.callId).maybeSingle();if(!c.data||(c.data.caller_id!==user.id&&c.data.callee_id!==user.id))return reply(403,{ok:false,error:"Not your call."});const s=await db.from("call_signals").select("id,from_user_id,payload").eq("call_id",d.callId).gt("id",Number(d.after)||0).neq("from_user_id",user.id).order("id",{ascending:true}).limit(40);if(s.error)return reply(400,{ok:false,error:"Could not poll call."});return reply(200,{ok:true,status:c.data.status,kind:c.data.kind,signals:(s.data??[]).map(x=>({id:Number(x.id),from:x.from_user_id,payload:x.payload}))});
+ }
+ if(body.action==="post_signal"){
+  if(typeof d.callId!=="string"||typeof d.payload!=="string"||d.payload.length>30000)return reply(400,{ok:false,error:"Invalid call signal."});const c=await db.from("calls").select("caller_id,callee_id,status").eq("id",d.callId).maybeSingle();if(!c.data||(c.data.caller_id!==user.id&&c.data.callee_id!==user.id))return reply(403,{ok:false,error:"Not your call."});if(!["active","ringing"].includes(c.data.status))return reply(400,{ok:false,error:"Call is over."});const r=await db.from("call_signals").insert({call_id:d.callId,from_user_id:user.id,payload:d.payload});if(r.error)return reply(400,{ok:false,error:"Could not send call signal."});return reply(200,{ok:true});
+ }
+ if(body.action==="call_log"){
+  const r=await db.from("calls").select("id,caller_id,callee_id,kind,status,created_at,started_at,ended_at").or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`).order("created_at",{ascending:false}).limit(40);if(r.error)return reply(400,{ok:false,error:"Could not load calls."});const ids=[...new Set((r.data??[]).flatMap(x=>[x.caller_id,x.callee_id]))];const ps=ids.length?await db.from("profiles").select("user_id,display_name").in("user_id",ids):{data:[]};const names=new Map((ps.data??[]).map(x=>[x.user_id,x.display_name]));return reply(200,{ok:true,calls:(r.data??[]).map(x=>({id:x.id,callerId:x.caller_id,calleeId:x.callee_id,peerId:x.caller_id===user.id?x.callee_id:x.caller_id,peerName:names.get(x.caller_id===user.id?x.callee_id:x.caller_id)??"Someone",kind:x.kind,status:x.status,direction:x.caller_id===user.id?"out":"in",createdAt:x.created_at,startedAt:x.started_at,endedAt:x.ended_at}))});
+ }
  if(body.action==="get_me"){
   const {data,error}=await db.from("profiles").select("*").eq("user_id",user.id).maybeSingle();
   if(error)return reply(400,{ok:false,error:"Could not load your profile."});

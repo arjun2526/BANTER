@@ -294,45 +294,9 @@ export const updateProfile = ({ data }: { data: Record<string, unknown> }) => {
 
 export const setAccountStatus = ({ data }: { data: { status: "active" | "deactivated" } }) => supabaseAction("set_account_status", data);
 
-export const deleteAccount = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    const id = context.userId;
-    await sql`
-      update messages set body = '', media_data = null, media_mime = null, media_name = null, deleted_at = now()
-      where sender_id = ${id}
-    `;
-    await sql`delete from stories where user_id = ${id}`;
-    await sql`delete from notifications where user_id = ${id}`;
-    await sql`delete from friend_requests where from_user_id = ${id} or to_user_id = ${id}`;
-    await sql`delete from friendships where user_a = ${id} or user_b = ${id}`;
-    await sql`delete from blocks where blocker_id = ${id} or blocked_id = ${id}`;
-    await sql`delete from invites where created_by = ${id}`;
-    await sql`delete from conversation_members where user_id = ${id}`;
-    await sql`delete from typing where user_id = ${id}`;
-    await sql`delete from profiles where user_id = ${id}`;
-    await sql`insert into account_tombstones (user_id) values (${id}) on conflict (user_id) do nothing`;
-    await sql`delete from "session" where "userId" = ${id}`;
-    return { ok: true };
-  });
+export const deleteAccount = () => supabaseAction("delete_account");
 
-export const startOver = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }): Promise<Ok<{ me: ReturnType<typeof mapMe> }> | Err> => {
-    const sql = await getSql();
-    await sql`delete from account_tombstones where user_id = ${context.userId}`;
-    const auth = await authUser(sql, context.userId);
-    const name = cleanDisplayName(auth.name) ?? "New member";
-    await sql`
-      insert into profiles (user_id, display_name, avatar_url)
-      values (${context.userId}, ${name}, ${safeMediaUrl(auth.image)})
-      on conflict (user_id) do nothing
-    `;
-    const row = await loadProfile(sql, context.userId);
-    if (!row) return fail("Could not start a new profile.");
-    return { ok: true, me: mapMe(row, auth.email) };
-  });
+export const startOver = () => supabaseAction("start_over");
 
 export const appeal = ({ data }: { data: { body: string } }) => supabaseAction("appeal", data);
 

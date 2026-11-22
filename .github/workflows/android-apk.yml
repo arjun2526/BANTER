@@ -3,7 +3,13 @@ name: BANTER Android APK
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
       - ".github/workflows/android-apk.yml"
 
 permissions:
@@ -17,30 +23,42 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
-      - name: Create Capacitor Android wrapper for current BANTER preview
+      - name: Install app dependencies
+        run: npm ci
+      - name: Build local BANTER web assets
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+      - name: Install Capacitor tooling
+        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+      - name: Create native Android project
         run: |
-          mkdir -p /tmp/banter-apk/www
-          cat > /tmp/banter-apk/www/index.html <<'HTML'
-          <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>BANTER</title></head><body><p>Opening BANTER…</p></body></html>
-          HTML
-          cd /tmp/banter-apk
-          npm init -y
-          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
-          npx cap init BANTER com.arjun2526.banter --web-dir=www
-          node -e "const fs=require('fs');const p='capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.server={url:'https://arjun2526.github.io/BANTER/',cleartext:false};fs.writeFileSync(p,JSON.stringify(c,null,2))"
+          if [ -f dist/index.html ]; then
+            WEB_DIR=dist
+          elif [ -f dist/client/index.html ]; then
+            WEB_DIR=dist/client
+          else
+            echo "BANTER web build is missing index.html."
+            find dist -maxdepth 3 -type f | head -80
+            exit 1
+          fi
+          npx cap init BANTER com.arjun2526.banter --web-dir="$WEB_DIR"
           npx cap add android
           npx cap sync android
       - name: Build installable debug APK
-        working-directory: /tmp/banter-apk/android
+        working-directory: android
         run: ./gradlew assembleDebug
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BANTER-Android-preview-debug
-          path: /tmp/banter-apk/android/app/build/outputs/apk/debug/app-debug.apk
+          name: BANTER-Android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30

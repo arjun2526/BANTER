@@ -29,7 +29,7 @@ Deno.serve(async(req:Request)=>{
  const mapPublic=(p:Record<string,any>,rel:string,mine:string[])=>({userId:p.user_id,username:p.username,displayName:p.status!=="active"?"Unavailable account":p.display_name,bio:p.status==="active"?p.bio:"",about:rel==="friends"&&p.status==="active"?p.about:"",avatarUrl:p.status==="active"?p.avatar_url:null,interests:p.status==="active"?parseList(p.interests):[],hobbies:rel==="friends"?p.hobbies:"",location:rel==="friends"?p.location:"",birthday:rel==="friends"?p.birthday:null,socials:rel==="friends"?parseSocials(p.socials):[],createdAt:p.created_at,relationship:rel,sharedInterests:parseList(p.interests).filter(x=>mine.includes(x)),online:!!p.show_online&&p.status==="active"&&!!p.last_seen_at&&Date.now()-new Date(p.last_seen_at).getTime()<45000,lastSeenAt:p.last_seen_visibility==="nobody"||p.last_seen_visibility==="friends"&&rel!=="friends"?null:p.last_seen_at,canMessage:rel==="friends"&&p.status==="active"});
 
  const adminAction=String(body.action??"");
- if(adminAction.startsWith("admin_")){
+ if(["admin_list_users","admin_ban_user","admin_restore_user","admin_delete_user"].includes(adminAction)){
   const caller=await profile(user.id);
   if(caller?.role!=="admin")return reply(403,{ok:false,error:"Admin access required."});
   const serviceKey=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

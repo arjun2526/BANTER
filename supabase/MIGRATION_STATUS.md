@@ -9,21 +9,18 @@ This file tracks the migration from the original TanStack Start + Better Auth se
 - RLS policies exist on the application tables.
 - Edge Function `banter-api` is deployed with JWT verification enabled.
 - The deployed Edge Function source is stored at `supabase/functions/banter-api/index.ts`.
-- The Edge Function currently implements: `get_me`, `check_username`, `complete_onboarding`, `update_profile`.
-- The original app still has 41 `createServerFn` operations. The 4 above are only partial equivalents; the other 37 operations below still need migration and parity testing.
+- The deployed Edge Function is at version 4 with JWT verification enabled.
+- Implemented Edge Function actions: `get_me`, `check_username`, `complete_onboarding`, `update_profile`, `set_account_status`, `appeal`, `search_people`, `get_profile`, `friend_action`, `report_person`, `mark_notices`, `pulse_typing`, `post_story`, `stories_for`, `story_media`, `react_story`, `delete_story`, `start_call`, `call_action`, `poll_call`, `post_signal`, `call_log`.
+- The matching browser API exports now invoke the Supabase Edge Function for those 22 operations.
+- This is a migration-in-progress, not release-ready: multi-user authorization, edge cases, rate limits, notifications, and response parity still need verification. In particular, block visibility and cross-user notification delivery need a secure database-side implementation.
+- 19 original server operations remain on the old server path and are listed below.
 - The current Android workflow is only a remote-URL wrapper and is not a standalone app bundle. Do not use it as the release APK workflow.
 
 ## Remaining server operations
 
-- [ ] `setAccountStatus`
 - [ ] `deleteAccount`
 - [ ] `startOver`
-- [ ] `appeal`
-- [ ] `searchPeople`
 - [ ] `loadPeople`
-- [ ] `getProfile`
-- [ ] `friendAction`
-- [ ] `reportPerson`
 - [ ] `createInvite`
 - [ ] `redeemInvite`
 - [ ] `revokeInvite`
@@ -32,21 +29,9 @@ This file tracks the migration from the original TanStack Start + Better Auth se
 - [ ] `groupAction`
 - [ ] `sendMessage`
 - [ ] `messageAction`
-- [ ] `pulseTyping`
 - [ ] `getAttachment`
 - [ ] `searchMessages`
 - [ ] `sync`
-- [ ] `markNotices`
-- [ ] `postStory`
-- [ ] `storiesFor`
-- [ ] `storyMedia`
-- [ ] `reactStory`
-- [ ] `deleteStory`
-- [ ] `startCall`
-- [ ] `callAction`
-- [ ] `pollCall`
-- [ ] `postSignal`
-- [ ] `callLog`
 - [ ] `listSessions`
 - [ ] `signOutAll`
 - [ ] `exportArchive`

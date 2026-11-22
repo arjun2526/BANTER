@@ -62,12 +62,12 @@ export const authClient = {
   signUp: {
     email: async ({ email, password, name }: { email: string; password: string; name: string; callbackURL?: string }) => {
       if (!supabase) return { error: { message: "BANTER is not configured yet." } };
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { display_name: name, name } },
       });
-      return { error: error ? { message: error.message } : null };
+      return { error: error ? { message: error.message } : null, needsEmailConfirmation: !error && !data.session };
     },
   },
 
@@ -81,7 +81,7 @@ export const authClient = {
 
   signOut: async () => {
     if (!supabase) return { error: null };
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: "local" });
     return { error: error ? { message: error.message } : null };
   },
 };

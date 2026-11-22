@@ -44,7 +44,7 @@ Deno.serve(async(req:Request)=>{
  }
  if(body.action==="post_story"){
   const gate=await active();if(gate.error)return reply(403,{ok:false,error:gate.error});const kind=d.kind,bodyText=typeof d.body==="string"?d.body.trim():"";if(!["text","image"].includes(String(kind)))return reply(400,{ok:false,error:"Invalid story type."});if(!await rateAllowed("story",12,86400000))return reply(429,{ok:false,error:"Story limit for today reached."});
-  let media:string|null=null;if(kind==="image"){const raw=typeof d.mediaData==="string"?d.mediaData.replace(/^data:image\\/(jpeg|png|webp);base64,/,""):"";if(!["image/jpeg","image/png","image/webp"].includes(String(d.mediaMime))||!raw||Math.floor(raw.length*.75)>380000)return reply(400,{ok:false,error:"Use a JPG, PNG, or WebP under 380 KB."});media=raw}else if(!bodyText||bodyText.length>240)return reply(400,{ok:false,error:"Write a status up to 240 characters."});
+  let media:string|null=null;if(kind==="image"){const raw=typeof d.mediaData==="string"?d.mediaData.split(",").pop()??"":"";if(!["image/jpeg","image/png","image/webp"].includes(String(d.mediaMime))||!raw||Math.floor(raw.length*.75)>380000)return reply(400,{ok:false,error:"Use a JPG, PNG, or WebP under 380 KB."});media=raw}else if(!bodyText||bodyText.length>240)return reply(400,{ok:false,error:"Write a status up to 240 characters."});
   const id=crypto.randomUUID(),expires=new Date(Date.now()+86400000).toISOString();const r=await db.from("stories").insert({id,user_id:user.id,kind,body:bodyText,media_data:media,bg:["clay","ink","sage","dusk","apricot"].includes(String(d.bg))?d.bg:"clay",expires_at:expires});if(r.error)return reply(400,{ok:false,error:"Could not post story."});return reply(200,{ok:true,id});
  }
  if(body.action==="stories_for"){

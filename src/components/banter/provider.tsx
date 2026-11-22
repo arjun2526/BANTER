@@ -246,7 +246,7 @@ export function BanterProvider({ children }: { children: ReactNode }) {
         const res = await api.getMe();
         if (stop) return;
         if (!res.ok) {
-          toastMsg(res.error);
+          toastMsg(res.error ?? "Could not load your account.");
           setLoading(false);
           return;
         }

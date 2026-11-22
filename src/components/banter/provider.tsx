@@ -163,6 +163,7 @@ type Ctx = {
   back: () => void;
   toastMsg: (s: string) => void;
   refresh: () => Promise<void>;
+  refreshPeople: () => Promise<void>;
   run: <T>(p: Promise<{ ok: boolean; error?: string } & T>) => Promise<({ ok: true } & T) | null>;
 };
 
@@ -316,6 +317,10 @@ export function BanterProvider({ children }: { children: ReactNode }) {
     if (res && "friends" in res) setPeople({ requests: res.requests, friends: res.friends, suggestions: res.suggestions });
   }, [run]);
 
+  const refreshPeople = useCallback(async () => {
+    await loadPeople();
+  }, [loadPeople]);
+
   useEffect(() => {
     if (view.name === "people" || view.name === "new-group") void loadPeople();
   }, [view.name, loadPeople]);
@@ -339,8 +344,8 @@ export function BanterProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Ctx>(() => ({
     loading, tombstone, me, chats, notices, unreadNotices, stories, incoming, thread, people, view, toast,
-    nav, tab, back, toastMsg, refresh, run,
-  }), [loading, tombstone, me, chats, notices, unreadNotices, stories, incoming, thread, people, view, toast, nav, tab, back, toastMsg, refresh, run]);
+    nav, tab, back, toastMsg, refresh, refreshPeople, run,
+  }), [loading, tombstone, me, chats, notices, unreadNotices, stories, incoming, thread, people, view, toast, nav, tab, back, toastMsg, refresh, refreshPeople, run]);
 
   return <BanterContext.Provider value={value}>{children}</BanterContext.Provider>;
 }

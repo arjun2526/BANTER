@@ -386,60 +386,7 @@ function mapPublic(row: ProfileRow, rel: string, meInterests: string[]) {
 
 export const searchPeople = ({ data }: { data: { q: string } }) => supabaseAction("search_people", data);
 
-export const loadPeople = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    const sql = await getSql();
-    const me = await loadProfile(sql, context.userId);
-    if (!me?.onboarding_complete) return fail("Finish your profile first.");
-    const mine = parseList(me.interests);
-    const reqRows = await sql<ProfileRow & { request_id: string; direction: string }>`
-      select p.*, r.id as request_id,
-        case when r.from_user_id = ${context.userId} then 'out' else 'in' end as direction
-      from friend_requests r
-      join profiles p on p.user_id = case when r.from_user_id = ${context.userId} then r.to_user_id else r.from_user_id end
-      where r.status = 'pending' and (r.from_user_id = ${context.userId} or r.to_user_id = ${context.userId})
-      order by r.created_at desc
-    `;
-    const friendRows = await sql<ProfileRow>`
-      select p.* from friendships f
-      join profiles p on p.user_id = case when f.user_a = ${context.userId} then f.user_b else f.user_a end
-      where f.user_a = ${context.userId} or f.user_b = ${context.userId}
-      order by p.display_name asc
-    `;
-    const suggestions = await sql<ProfileRow>`
-      select * from profiles
-      where onboarding_complete = true and status = 'active' and discoverability = 'everyone'
-        and user_id <> ${context.userId}
-        and not exists (
-          select 1 from blocks b
-          where (b.blocker_id = ${context.userId} and b.blocked_id = profiles.user_id)
-             or (b.blocker_id = profiles.user_id and b.blocked_id = ${context.userId})
-        )
-        and not exists (
-          select 1 from friendships f
-          where (f.user_a = ${context.userId} and f.user_b = profiles.user_id)
-             or (f.user_b = ${context.userId} and f.user_a = profiles.user_id)
-        )
-      order by created_at desc
-      limit 40
-    `;
-    const ranked = suggestions
-      .map((row) => ({ row, score: parseList(row.interests).filter((i) => mine.includes(i)).length }))
-      .filter((x) => (mine.length ? x.score > 0 : true))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 12);
-    return {
-      ok: true as const,
-      requests: reqRows.map((row) => ({
-        id: row.request_id,
-        direction: row.direction === "out" ? "out" as const : "in" as const,
-        person: mapPublic(row, row.direction === "out" ? "pending-out" : "pending-in", mine),
-      })),
-      friends: friendRows.map((row) => mapPublic(row, "friends", mine)),
-      suggestions: ranked.map((x) => mapPublic(x.row, "none", mine)),
-    };
-  });
+export const loadPeople = () => supabaseAction("load_people");
 
 export const getProfile = ({ data }: { data: { userId?: string; username?: string } }) => supabaseAction("get_profile", data);
 

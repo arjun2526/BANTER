@@ -970,7 +970,7 @@ export const createGroup = createServerFn({ method: "POST" })
     if (gate.error || !gate.row) return fail(gate.error ?? "Unavailable.");
     const title = data.title.trim();
     if (!title) return fail("Give the group a name.");
-    const ids = [...new Set(data.memberIds.filter((id) => id !== context.userId))];
+    const ids: string[] = [...new Set<string>((data.memberIds as string[]).filter((id: string) => id !== context.userId))];
     for (const id of ids) {
       if (!(await friends(sql, context.userId, id)) || (await blocked(sql, context.userId, id))) {
         return fail("You can only add friends.");
@@ -1175,7 +1175,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     }
     let media: string | null = null;
     let mime: string | null = null;
-    let name: string | null = data.mediaName?.trim().slice(0, 120) || null;
+    const name: string | null = data.mediaName?.trim().slice(0, 120) || null;
     if (kind === "image" || kind === "audio" || kind === "file") {
       if (!data.mediaData || !data.mediaMime) return fail("That attachment is empty.");
       const bare = bareBase64(data.mediaData);
@@ -1231,7 +1231,7 @@ export const sendMessage = createServerFn({ method: "POST" })
       }
     }
     if (kind === "text" || kind === "announce") {
-      const names = [...new Set((body.match(/@([a-z][a-z0-9_]{2,19})/g) ?? []).map((s) => s.slice(1)))];
+      const names = [...new Set((body.match(/@([a-z][a-z0-9_]{2,19})/g) ?? []).map((s: string) => s.slice(1)))];
       for (const username of names) {
         const hit = await sql<{ user_id: string; notify_messages: boolean }>`
           select p.user_id, p.notify_messages from profiles p

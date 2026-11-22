@@ -64,7 +64,7 @@ export function CallRoom({
       return stream;
     }
 
-    let facingMode: "user" | "environment" = "user";
+    const facingMode: "user" | "environment" = "user";
 
     async function maybeOffer(status: string) {
       if (role !== "caller" || offered || status !== "active") return;

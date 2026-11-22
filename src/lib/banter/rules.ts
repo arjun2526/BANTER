@@ -36,7 +36,7 @@ export function cleanUsername(raw: string): string | null {
 export function cleanDisplayName(raw: string): string | null {
   const n = raw.trim().replace(/\s+/g, " ");
   if (n.length < 1 || n.length > 40) return null;
-  if (/[\u0000-\u001f]/.test(n)) return null;
+  if ([...n].some((char) => char.charCodeAt(0) <= 31)) return null;
   return n;
 }
 

@@ -149,19 +149,6 @@ function Panel() {
   if (v.name === "people") return <People />;
   if (v.name === "stories") return <Stories />;
   if (v.name === "story") return <StoryViewer userId={v.id} />;
-  if (v.name === "calls") return <Calls />;
-  if (v.name === "call") return (
-    <CallRoom
-      callId={v.callId}
-      kind={v.kind}
-      role={v.role}
-      peerName={v.peerName}
-      onHangup={() => {
-        void api.callAction({ data: { callId: v.callId, action: "end" } });
-        b.back();
-      }}
-    />
-  );
   if (v.name === "me") return <MeScreen />;
   if (v.name === "edit") return <EditProfile />;
   if (v.name === "user") return <PersonScreen userId={v.id} />;

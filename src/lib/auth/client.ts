@@ -79,6 +79,18 @@ export const authClient = {
     },
   },
 
+
+  changePassword: async ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string; revokeOtherSessions?: boolean }) => {
+    if (!supabase) return { error: { message: "BANTER is not configured yet." } };
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const email = userData.user?.email;
+    if (userError || !email) return { error: { message: userError?.message ?? "Sign in again before changing your password." } };
+    const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+    if (verifyError) return { error: { message: "Your current password is incorrect." } };
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error: error ? { message: error.message } : null };
+  },
+
   signOut: async () => {
     if (!supabase) return { error: null };
     const { error } = await supabase.auth.signOut({ scope: "local" });

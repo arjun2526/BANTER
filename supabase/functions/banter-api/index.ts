@@ -174,6 +174,13 @@ Deno.serve(async(req:Request)=>{
  }
 
 
+
+ if(body.action==="admin_overview"){
+  const r=await db.rpc("banter_admin_overview");if(r.error)return reply(403,{ok:false,error:r.error.message||"Admins only."});return reply(200,{ok:true,...r.data});
+ }
+ if(body.action==="admin_act"){
+  const action=String(d.action??"");if(!["suspend","restore","dismiss-report","close-appeal"].includes(action))return reply(400,{ok:false,error:"Invalid moderation action."});const r=await db.rpc("banter_admin_act",{p_action:action,p_user_id:typeof d.userId==="string"?d.userId:null,p_report_id:typeof d.reportId==="string"?d.reportId:null,p_appeal_id:typeof d.appealId==="string"?d.appealId:null});if(r.error)return reply(403,{ok:false,error:r.error.message||"Could not apply moderation action."});return reply(200,{ok:true});
+ }
  if(body.action==="export_archive"){
   const gate=await active();if(gate.error)return reply(403,{ok:false,error:gate.error});if(!await rateAllowed("export",6,3600000))return reply(429,{ok:false,error:"Export limit reached. Try again in an hour."});const includeMedia=d.includeMedia===true;
   const r=await db.from("messages").select("id,conversation_id,body,kind,created_at,media_name,media_mime,media_data").eq("sender_id",user.id).is("deleted_at",null).order("created_at",{ascending:false}).limit(2000);if(r.error)return reply(400,{ok:false,error:"Could not prepare archive."});let mediaKept=0;const messages=(r.data??[]).map(m=>{let media:string|null=null;if(includeMedia&&m.media_data&&mediaKept<20){media=String(m.media_data);mediaKept++}return {id:m.id,conversationId:m.conversation_id,body:m.body,kind:m.kind,createdAt:m.created_at,fileName:m.media_name,mime:media?m.media_mime:null,media}}).reverse();await db.from("backup_records").insert({id:crypto.randomUUID(),user_id:user.id,kind:"export",note:includeMedia?"with-recent-media":"text"});return reply(200,{ok:true,archive:{product:"BANTER",exportedAt:new Date().toISOString(),note:"Live chats stay on Banter servers so they can be delivered. This file is your personal copy. It is not end-to-end encryption of the live conversation.",profile:mapMe(gate.p),messages}});
@@ -268,7 +275,8 @@ Deno.serve(async(req:Request)=>{
   const {data,error}=await db.from("profiles").update({display_name,username,bio:typeof d.bio==="string"?d.bio.trim().slice(0,160):"",about:typeof d.about==="string"?d.about.trim().slice(0,600):"",hobbies:typeof d.hobbies==="string"?d.hobbies.trim().slice(0,200):"",interests:JSON.stringify(interests),onboarding_complete:true,username_changed_at:new Date().toISOString()}).eq("user_id",user.id).select("*").single();
   if(error?.code==="23505")return reply(409,{ok:false,error:"That Banter ID is already taken."});
   if(error||!data)return reply(400,{ok:false,error:"Could not finish your profile."});
-  return reply(200,{ok:true,me:mapMe(data)});
+  await db.rpc("banter_claim_first_admin");const refreshed=await profile(user.id);
+  return reply(200,{ok:true,me:mapMe(refreshed??data)});
  }
  if(body.action==="update_profile"){
   const keys=["display_name","username","bio","about","hobbies","location","birthday","interests","socials","discoverability","last_seen_visibility","show_online","read_receipts","theme","avatar_url","notify_messages","notify_friends","notify_stories"];

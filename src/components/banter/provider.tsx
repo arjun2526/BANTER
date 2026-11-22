@@ -85,6 +85,7 @@ export type StoryRing = {
   userId: string;
   displayName: string;
   username: string | null;
+  avatarUrl: string | null;
   count: number;
   unseen: number;
 };

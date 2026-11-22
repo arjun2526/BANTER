@@ -173,6 +173,11 @@ Deno.serve(async(req:Request)=>{
   return reply(400,{ok:false,error:"Unsupported group action."});
  }
 
+
+ if(body.action==="export_archive"){
+  const gate=await active();if(gate.error)return reply(403,{ok:false,error:gate.error});if(!await rateAllowed("export",6,3600000))return reply(429,{ok:false,error:"Export limit reached. Try again in an hour."});const includeMedia=d.includeMedia===true;
+  const r=await db.from("messages").select("id,conversation_id,body,kind,created_at,media_name,media_mime,media_data").eq("sender_id",user.id).is("deleted_at",null).order("created_at",{ascending:false}).limit(2000);if(r.error)return reply(400,{ok:false,error:"Could not prepare archive."});let mediaKept=0;const messages=(r.data??[]).map(m=>{let media:string|null=null;if(includeMedia&&m.media_data&&mediaKept<20){media=String(m.media_data);mediaKept++}return {id:m.id,conversationId:m.conversation_id,body:m.body,kind:m.kind,createdAt:m.created_at,fileName:m.media_name,mime:media?m.media_mime:null,media}}).reverse();await db.from("backup_records").insert({id:crypto.randomUUID(),user_id:user.id,kind:"export",note:includeMedia?"with-recent-media":"text"});return reply(200,{ok:true,archive:{product:"BANTER",exportedAt:new Date().toISOString(),note:"Live chats stay on Banter servers so they can be delivered. This file is your personal copy. It is not end-to-end encryption of the live conversation.",profile:mapMe(gate.p),messages}});
+ }
  if(body.action==="get_attachment"){
   const mid=typeof d.messageId==="string"?d.messageId:"";const r=await db.from("messages").select("conversation_id,media_data,media_mime,media_name,deleted_at").eq("id",mid).maybeSingle();const m=r.data;if(!m||m.deleted_at||!m.media_data||!m.media_mime)return reply(404,{ok:false,error:"Attachment unavailable."});if(!await roleFor(m.conversation_id,user.id))return reply(403,{ok:false,error:"You don't have access."});return reply(200,{ok:true,mime:m.media_mime,data:m.media_data,name:m.media_name});
  }

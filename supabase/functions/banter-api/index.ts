@@ -110,9 +110,11 @@ Deno.serve(async(req:Request)=>{
   const r=await db.from("calls").select("id,caller_id,callee_id,kind,status,created_at,started_at,ended_at").or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`).order("created_at",{ascending:false}).limit(40);if(r.error)return reply(400,{ok:false,error:"Could not load calls."});const ids=[...new Set((r.data??[]).flatMap(x=>[x.caller_id,x.callee_id]))];const ps=ids.length?await db.from("profiles").select("user_id,display_name").in("user_id",ids):{data:[]};const names=new Map((ps.data??[]).map(x=>[x.user_id,x.display_name]));return reply(200,{ok:true,calls:(r.data??[]).map(x=>({id:x.id,callerId:x.caller_id,calleeId:x.callee_id,peerId:x.caller_id===user.id?x.callee_id:x.caller_id,peerName:names.get(x.caller_id===user.id?x.callee_id:x.caller_id)??"Someone",kind:x.kind,status:x.status,direction:x.caller_id===user.id?"out":"in",createdAt:x.created_at,startedAt:x.started_at,endedAt:x.ended_at}))});
  }
  if(body.action==="get_me"){
+  const tomb=await db.from("account_tombstones").select("user_id").eq("user_id",user.id).maybeSingle();
+  if(tomb.data)return reply(200,{ok:true,tombstone:true});
   const {data,error}=await db.from("profiles").select("*").eq("user_id",user.id).maybeSingle();
-  if(error)return reply(400,{ok:false,error:"Could not load your profile."});
-  return reply(200,{ok:true,profile:data,email:user.email??null});
+  if(error||!data)return reply(400,{ok:false,error:"Could not load your profile."});
+  return reply(200,{ok:true,tombstone:false,me:mapMe(data)});
  }
  if(body.action==="check_username"){
   const username=cleanUsername(d.username);if(!username)return reply(200,{ok:true,available:false,username:null});
@@ -127,7 +129,7 @@ Deno.serve(async(req:Request)=>{
   const {data,error}=await db.from("profiles").update({display_name,username,bio:typeof d.bio==="string"?d.bio.trim().slice(0,160):"",about:typeof d.about==="string"?d.about.trim().slice(0,600):"",interests:JSON.stringify(interests),onboarding_complete:true,username_changed_at:new Date().toISOString()}).eq("user_id",user.id).select("*").single();
   if(error?.code==="23505")return reply(409,{ok:false,error:"That Banter ID is already taken."});
   if(error||!data)return reply(400,{ok:false,error:"Could not finish your profile."});
-  return reply(200,{ok:true,profile:data});
+  return reply(200,{ok:true,me:mapMe(data)});
  }
  if(body.action==="update_profile"){
   const keys=["display_name","username","bio","about","hobbies","location","birthday","interests","socials","discoverability","last_seen_visibility","show_online","read_receipts","theme","notify_messages","notify_friends","notify_stories"];

@@ -4,14 +4,12 @@ import {
   Bell,
   ImagePlus,
   Mic,
-  Phone,
   Search,
   Send,
   Shield,
   Square,
   UserRound,
   Users,
-  Video,
 } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { requireSupabase } from "@/lib/supabase/client";
@@ -20,7 +18,6 @@ import * as api from "@/lib/banter/api";
 import { decryptArchive, downloadBlob, encryptArchive } from "@/lib/banter/backup";
 import { blobToBase64, compressImage, dataUrl } from "@/lib/banter/media";
 import { INTERESTS, REACTIONS } from "@/lib/banter/rules";
-import { CallRoom } from "@/components/banter/call-room";
 import { Mark, Wordmark } from "@/components/banter/mark";
 import { useBanter, type Chat, type Me, type Msg, type Person, type View } from "@/components/banter/provider";
 import { Avatar, Btn, Empty, Field, TopBar, inputClass, when } from "@/components/banter/ui";
@@ -60,7 +57,7 @@ export function BanterApp() {
 
 function Frame() {
   const b = useBanter();
-  const tab = b.view.name === "inbox" || b.view.name === "stories" || b.view.name === "people" || b.view.name === "calls" || b.view.name === "me";
+  const tab = b.view.name === "inbox" || b.view.name === "stories" || b.view.name === "people" || b.view.name === "me";
   return (
     <div className="relative flex h-dvh bg-bg text-fg">
       <aside className="hidden w-[22rem] shrink-0 flex-col border-r border-line md:flex">
@@ -74,28 +71,10 @@ function Frame() {
           {b.view.name === "inbox" ? <StoryPane /> : <Panel />}
         </div>
         {tab ? <BottomNav /> : null}
-        {b.incoming && b.view.name !== "call" ? (
-          <div className="absolute inset-x-0 top-3 z-20 mx-auto flex w-[min(100%-1.5rem,28rem)] items-center gap-3 rounded-3xl bg-elev px-3 py-3 shadow-lg ring-1 ring-line">
-            <Avatar name={b.incoming.callerName} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-medium">{b.incoming.callerName}</div>
-              <div className="text-xs text-muted">{b.incoming.kind === "video" ? "Video call" : "Voice call"}</div>
-            </div>
-            <Btn tone="danger" className="px-3" onClick={() => void b.run(api.callAction({ data: { callId: b.incoming!.id, action: "decline" } })).then(() => b.refresh())}>Decline</Btn>
-            <Btn className="px-3" onClick={() => void answer(b)}>Answer</Btn>
-          </div>
-        ) : null}
         {b.toast ? <div className="pointer-events-none absolute bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full bg-fg px-4 py-2 text-sm text-bg">{b.toast}</div> : null}
       </div>
     </div>
   );
-}
-
-async function answer(b: ReturnType<typeof useBanter>) {
-  if (!b.incoming) return;
-  const res = await b.run(api.callAction({ data: { callId: b.incoming.id, action: "accept" } }));
-  if (!res) return;
-  b.nav({ name: "call", callId: b.incoming.id, peerName: b.incoming.callerName, kind: b.incoming.kind === "video" ? "video" : "voice", role: "callee" });
 }
 
 function BottomNav() {
@@ -103,11 +82,10 @@ function BottomNav() {
   const items = [
     ["inbox", "Chats", MessageIcon],
     ["people", "People", Users],
-    ["calls", "Calls", Phone],
     ["me", "You", UserRound],
   ] as const;
   return (
-    <nav className="grid grid-cols-4 border-t border-line bg-elev pb-[max(0.4rem,env(safe-area-inset-bottom))] md:hidden">
+    <nav className="grid grid-cols-3 border-t border-line bg-elev pb-[max(0.4rem,env(safe-area-inset-bottom))] md:hidden">
       {items.map(([name, label, Icon]) => {
         const on = b.view.name === name;
         return (
@@ -130,7 +108,6 @@ function Sidebar() {
   const tabs = [
     ["inbox", "Chats"],
     ["people", "People"],
-    ["calls", "Calls"],
     ["me", "You"],
   ] as const;
   return (
@@ -378,12 +355,6 @@ function ThreadView({ id }: { id: string }) {
         onBack={b.back}
         right={
           <div className="flex">
-            {chat?.kind === "direct" && chat.peerId ? (
-              <>
-                <IconBtn label="Voice call" onClick={() => void placeCall(b, chat.peerId!, chat.title || "Friend", "voice")}><Phone className="size-5" /></IconBtn>
-                <IconBtn label="Video call" onClick={() => void placeCall(b, chat.peerId!, chat.title || "Friend", "video")}><Video className="size-5" /></IconBtn>
-              </>
-            ) : null}
             <IconBtn label="Details" onClick={() => b.nav({ name: "group", id })}><Users className="size-5" /></IconBtn>
           </div>
         }
@@ -434,11 +405,6 @@ function ThreadView({ id }: { id: string }) {
       </form>
       {menu ? (
         <Sheet onClose={() => setMenu(null)}>
-          <div className="flex justify-center gap-2">
-            {REACTIONS.map((emoji) => (
-              <button key={emoji} type="button" className="grid size-11 place-items-center rounded-2xl bg-sunken text-lg" onClick={() => { void b.run(api.messageAction({ data: { messageId: menu.id, action: "react", emoji } })).then(() => b.refresh()); setMenu(null); }}>{emoji}</button>
-            ))}
-          </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Btn tone="quiet" onClick={() => { setReply(menu); setMenu(null); }}>Reply</Btn>
             <Btn tone="quiet" onClick={() => { setForward(menu); setMenu(null); }}>Forward</Btn>
@@ -481,7 +447,6 @@ function Bubble({ msg, mine, members, onOpen }: { msg: Msg; mine: boolean; membe
         {msg.hasMedia ? <Attachment id={msg.id} kind={msg.kind} mime={msg.mime} name={msg.fileName} /> : null}
         {msg.body ? <p className="text-[15px] leading-snug whitespace-pre-wrap">{msg.body}</p> : null}
         <div className={`mt-1 flex items-center justify-end gap-2 text-[10px] tabular-nums ${mine ? "text-on-clay/70" : "text-muted"}`}>
-          {msg.reactions.length ? <span>{summarize(msg.reactions)}</span> : null}
           {msg.editedAt ? <span>Edited</span> : null}
           {msg.starred ? <span>Starred</span> : null}
           <span>{when(msg.createdAt)}</span>
@@ -490,12 +455,6 @@ function Bubble({ msg, mine, members, onOpen }: { msg: Msg; mine: boolean; membe
       </button>
     </div>
   );
-}
-
-function summarize(reactions: { emoji: string }[]) {
-  const map = new Map<string, number>();
-  for (const r of reactions) map.set(r.emoji, (map.get(r.emoji) ?? 0) + 1);
-  return [...map.entries()].map(([e, n]) => `${e}${n > 1 ? n : ""}`).join(" ");
 }
 
 function Attachment({ id, kind, mime, name }: { id: string; kind: string; mime: string | null; name: string | null }) {
@@ -641,9 +600,10 @@ function Stories() {
           ))}
         </div>
         <Btn onClick={() => void b.run(api.postStory({ data: { kind: "text", body, bg } })).then((res) => { if (res) { setBody(""); void b.refresh(); } })}>Share with friends</Btn>
-        <label className="block">
-          <span className="mb-2 block text-sm text-muted">Add a photo or video (up to 50 MB)</span>
-          <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" onChange={(e) => {
+        <label className="group flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-clay/50 bg-elev/70 px-4 py-5 text-center transition hover:border-clay hover:bg-clay/10">
+          <span className="text-sm font-semibold text-fg">Choose a photo or video</span>
+          <span className="mt-1 text-xs text-muted">Add a moment from your camera roll · up to 50 MB</span>
+          <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" onChange={(e) => {
             const file = e.target.files?.[0];
             if (!file || !b.me) return;
             const kind = file.type.startsWith("video/") ? "video" : "image";
@@ -713,35 +673,6 @@ function StoryViewer({ userId }: { userId: string }) {
       </div>
     </div>
   );
-}
-
-function Calls() {
-  const b = useBanter();
-  const [rows, setRows] = useState<{ id: string; peerId: string; peerName: string; kind: string; status: string; direction: "in" | "out"; createdAt: string | null }[]>([]);
-  useEffect(() => { void api.callLog().then((res) => { if (res.ok) setRows(res.calls); }); }, []);
-  return (
-    <div className="flex h-full flex-col">
-      <TopBar title="Calls" onBack={b.back} />
-      <div className="space-y-3 overflow-y-auto px-4 py-4">
-        <p className="text-sm text-muted">One-to-one voice and video use a direct browser connection. Group calls are not in this version — there is no media relay, and a fake button would be worse than an honest limit.</p>
-        {rows.length === 0 ? <Empty title="No calls yet" body="Open a friend and start a voice or video call while you're both online." /> : null}
-        {rows.map((c) => (
-          <div key={c.id} className="flex items-center gap-3 border-b border-line py-3">
-            <div className="min-w-0 flex-1">
-              <div className="font-medium">{c.peerName}</div>
-              <div className="text-xs text-muted">{c.direction === "out" ? "Outgoing" : "Incoming"} · {c.kind} · {c.status} · {when(c.createdAt)}</div>
-            </div>
-            <IconBtn label="Call back" onClick={() => void placeCall(b, c.peerId, c.peerName, c.kind === "video" ? "video" : "voice")}><Phone className="size-5" /></IconBtn>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-async function placeCall(b: ReturnType<typeof useBanter>, userId: string, name: string, kind: "voice" | "video") {
-  const res = await b.run(api.startCall({ data: { userId, kind } }));
-  if (res && "callId" in res) b.nav({ name: "call", callId: res.callId, peerName: name, kind, role: "caller" });
 }
 
 function MeScreen() {
@@ -1339,7 +1270,7 @@ function openHref(b: ReturnType<typeof useBanter>, href: string) {
   if (kind === "thread" && id) b.nav({ name: "thread", id });
   else if (kind === "user" && id) b.nav({ name: "user", id });
   else if (kind === "story" && id) b.nav({ name: "story", id });
-  else b.tab("calls");
+  else b.tab("inbox");
 }
 
 async function inviteFriend(b: ReturnType<typeof useBanter>, conversationId?: string) {

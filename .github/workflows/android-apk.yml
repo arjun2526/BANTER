@@ -54,8 +54,8 @@ jobs:
           npx cap init BANTER com.arjun2526.banter --web-dir="$WEB_DIR"
           npx cap add android
           mkdir -p resources
-          convert -background none public/banter-icon.svg -resize 512x512 resources/icon.png
-          npm install --no-save @capacitor/assets
+          npm install --no-save sharp @capacitor/assets
+          node -e "require('sharp')('public/banter-icon.svg').resize(512,512).png().toFile('resources/icon.png')"
           npx capacitor-assets generate --android
           npx cap sync android
       - name: Build installable debug APK

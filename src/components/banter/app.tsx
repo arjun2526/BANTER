@@ -108,7 +108,7 @@ function BottomNav() {
     ["me", "You", UserRound],
   ] as const;
   return (
-    <nav className="grid grid-cols-5 border-t border-line bg-elev pb-[max(0.4rem,env(safe-area-inset-bottom))] md:hidden">
+    <nav className="grid grid-cols-4 border-t border-line bg-elev pb-[max(0.4rem,env(safe-area-inset-bottom))] md:hidden">
       {items.map(([name, label, Icon]) => {
         const on = b.view.name === name;
         return (

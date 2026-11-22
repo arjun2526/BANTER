@@ -44,8 +44,11 @@ jobs:
             WEB_DIR=dist
           elif [ -f dist/client/index.html ]; then
             WEB_DIR=dist/client
+          elif [ -f dist/client/_shell.html ]; then
+            WEB_DIR=dist/client
+            cp "$WEB_DIR/_shell.html" "$WEB_DIR/index.html"
           else
-            echo "BANTER web build is missing index.html."
+            echo "BANTER web build is missing its SPA shell."
             find dist -maxdepth 3 -type f | head -80
             exit 1
           fi

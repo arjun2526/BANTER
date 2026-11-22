@@ -407,135 +407,13 @@ async function friendAccept(sql: Sql, me: ProfileRow, them: ProfileRow, requestI
 
 export const reportPerson = ({ data }: { data: { userId?: string; conversationId?: string; reason: string; details?: string } }) => supabaseAction("report_person", data);
 
-export const createInvite = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ conversationId: z.string().optional() }).parse(input),
-  )
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<Ok<{ code: string; expiresAt: string }> | Err> => {
-    const sql = await getSql();
-    const gate = await requireActive(sql, context.userId);
-    if (gate.error) return fail(gate.error);
-    if (data.conversationId) {
-      const role = await memberRole(sql, data.conversationId, context.userId);
-      if (role !== "admin") return fail("Only group admins can create invite links.");
-    }
-    if (!(await allow(sql, context.userId, "invite", 20, 3600_000))) return fail("Too many invite links.");
-    const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
-    let code = "";
-    const bytes = crypto.getRandomValues(new Uint8Array(10));
-    for (const b of bytes) code += alphabet[b % alphabet.length];
-    const expires = new Date(Date.now() + 7 * 24 * 3600_000).toISOString();
-    await sql`
-      insert into invites (code, created_by, conversation_id, expires_at)
-      values (${code}, ${context.userId}, ${data.conversationId ?? null}, ${expires})
-    `;
-    return { ok: true, code, expiresAt: expires };
-  });
+export const createInvite = ({ data }: { data: { conversationId?: string } }) => supabaseAction("create_invite", data);
 
-export const redeemInvite = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ code: z.string().max(20) }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<Ok<{ kind: string; conversationId: string | null }> | Err> => {
-    const sql = await getSql();
-    const gate = await requireActive(sql, context.userId);
-    if (gate.error || !gate.row) return fail(gate.error ?? "Unavailable.");
-    const code = data.code.trim().toLowerCase();
-    const rows = await sql<{
-      code: string;
-      created_by: string;
-      conversation_id: string | null;
-      expires_at: unknown;
-      revoked_at: unknown;
-      max_uses: number;
-      uses: number;
-    }>`select * from invites where code = ${code}`;
-    const invite = rows[0];
-    if (!invite || invite.revoked_at) return fail("This invite is no longer valid.");
-    if (new Date(String(invite.expires_at)).getTime() < Date.now()) return fail("This invite has expired.");
-    if (num(invite.uses) >= num(invite.max_uses)) return fail("This invite has been used up.");
-    if (invite.created_by === context.userId) return fail("That's your own invite.");
-    if (await blocked(sql, context.userId, invite.created_by)) return fail("You can't use this invite.");
-    if (invite.conversation_id) {
-      const role = await memberRole(sql, invite.conversation_id, context.userId);
-      if (!role) {
-        const members = await sql<{ n: number }>`
-          select count(*) as n from conversation_members
-          where conversation_id = ${invite.conversation_id} and left_at is null
-        `;
-        if (num(members[0]?.n) >= 50) return fail("That group is full.");
-        await sql`
-          insert into conversation_members (conversation_id, user_id, role)
-          values (${invite.conversation_id}, ${context.userId}, 'member')
-          on conflict (conversation_id, user_id) do update set left_at = null, joined_at = now()
-        `;
-        await sql`
-          insert into messages (id, conversation_id, sender_id, body, kind)
-          values (${crypto.randomUUID()}, ${invite.conversation_id}, ${context.userId}, ${"joined the group"}, 'system')
-        `;
-      }
-    } else if (!(await friends(sql, context.userId, invite.created_by))) {
-      const [a, b] = pair(context.userId, invite.created_by);
-      await sql`insert into friendships (user_a, user_b) values (${a}, ${b}) on conflict do nothing`;
-      const inviter = await loadProfile(sql, invite.created_by);
-      if (inviter?.notify_friends) {
-        await notify(
-          sql,
-          invite.created_by,
-          "friend",
-          "Invite accepted",
-          `${gate.row.display_name} joined Banter from your link`,
-          `user:${context.userId}`,
-        );
-      }
-    }
-    await sql`update invites set uses = uses + 1 where code = ${code}`;
-    return { ok: true, kind: invite.conversation_id ? "group" : "friend", conversationId: invite.conversation_id };
-  });
+export const redeemInvite = ({ data }: { data: { code: string } }) => supabaseAction("redeem_invite", data);
 
-export const revokeInvite = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ code: z.string() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<{ ok: true } | Err> => {
-    const sql = await getSql();
-    await sql`
-      update invites set revoked_at = now()
-      where code = ${data.code} and created_by = ${context.userId} and revoked_at is null
-    `;
-    return { ok: true };
-  });
+export const revokeInvite = ({ data }: { data: { code: string } }) => supabaseAction("revoke_invite", data);
 
-export const openDirect = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ userId: z.string() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }): Promise<Ok<{ conversationId: string }> | Err> => {
-    const sql = await getSql();
-    const gate = await requireActive(sql, context.userId);
-    if (gate.error) return fail(gate.error);
-    if (!(await friends(sql, context.userId, data.userId))) return fail("Add each other as friends before messaging.");
-    if (await blocked(sql, context.userId, data.userId)) return fail("You can't message this person.");
-    const [a, b] = pair(context.userId, data.userId);
-    const existing = await sql<{ conversation_id: string }>`
-      select conversation_id from direct_pairs where user_a = ${a} and user_b = ${b}
-    `;
-    if (existing[0]) {
-      await sql`
-        update conversation_members set left_at = null
-        where conversation_id = ${existing[0].conversation_id} and user_id = ${context.userId}
-      `;
-      return { ok: true, conversationId: existing[0].conversation_id };
-    }
-    const id = crypto.randomUUID();
-    await sql`
-      insert into conversations (id, kind, created_by) values (${id}, 'direct', ${context.userId})
-    `;
-    await sql`
-      insert into conversation_members (conversation_id, user_id, role) values
-        (${id}, ${a}, 'member'), (${id}, ${b}, 'member')
-    `;
-    await sql`insert into direct_pairs (user_a, user_b, conversation_id) values (${a}, ${b}, ${id})`;
-    return { ok: true, conversationId: id };
-  });
+export const openDirect = ({ data }: { data: { userId: string } }) => supabaseAction("open_direct", data);
 
 export const createGroup = ({ data }: { data: Record<string, unknown> }) => supabaseAction("create_group", data);
 

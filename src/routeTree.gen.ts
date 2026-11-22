@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as JoinCodeRouteImport } from './routes/join.$code'
 import { Route as UUsernameRouteImport } from './routes/u.$username'
-import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,18 +34,12 @@ const UUsernameRoute = UUsernameRouteImport.update({
   path: '/u/$username',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/join/$code': typeof JoinCodeRoute
   '/u/$username': typeof UUsernameRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -65,7 +58,7 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/join/$code' | '/u/$username' | '/api/auth/$'
+  fullPaths: '/' | '/login' | '/join/$code' | '/u/$username'
   fileRoutesByTo: FileRoutesByTo
   to: '/' | '/login' | '/join/$code' | '/u/$username' | '/api/auth/$'
   id:
@@ -77,7 +70,6 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   JoinCodeRoute: typeof JoinCodeRoute
   UUsernameRoute: typeof UUsernameRoute
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -110,13 +102,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UUsernameRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -125,7 +110,6 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   JoinCodeRoute: JoinCodeRoute,
   UUsernameRoute: UUsernameRoute,
-  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

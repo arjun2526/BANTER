@@ -102,7 +102,6 @@ function BottomNav() {
   const b = useBanter();
   const items = [
     ["inbox", "Chats", MessageIcon],
-    ["stories", "Stories", CircleIcon],
     ["people", "People", Users],
     ["calls", "Calls", Phone],
     ["me", "You", UserRound],
@@ -125,15 +124,11 @@ function BottomNav() {
 function MessageIcon({ className }: { className?: string }) {
   return <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 17.5 4 20V7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v7A2.5 2.5 0 0 1 17.5 17H8Z" /></svg>;
 }
-function CircleIcon({ className }: { className?: string }) {
-  return <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2" fill="currentColor" /></svg>;
-}
 
 function Sidebar() {
   const b = useBanter();
   const tabs = [
     ["inbox", "Chats"],
-    ["stories", "Stories"],
     ["people", "People"],
     ["calls", "Calls"],
     ["me", "You"],

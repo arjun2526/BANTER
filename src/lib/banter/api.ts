@@ -780,66 +780,7 @@ export const signOutAll = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const exportArchive = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ includeMedia: z.boolean().optional() }).parse(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const gate = await requireActive(sql, context.userId);
-    if (gate.error || !gate.row) return fail(gate.error ?? "Unavailable.");
-    if (!(await allow(sql, context.userId, "export", 6, 3600_000))) return fail("Export limit reached. Try again in an hour.");
-    const auth = await authUser(sql, context.userId);
-    const messages = await sql<{
-      id: string;
-      conversation_id: string;
-      body: string;
-      kind: string;
-      created_at: unknown;
-      media_name: string | null;
-      media_mime: string | null;
-      media_data: string | null;
-    }>`
-      select m.id, m.conversation_id, m.body, m.kind, m.created_at, m.media_name, m.media_mime,
-        case when ${!!data.includeMedia} then m.media_data else null end as media_data
-      from messages m
-      join conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = ${context.userId}
-      where m.sender_id = ${context.userId} and m.deleted_at is null
-      order by m.created_at desc
-      limit 2000
-    `;
-    let mediaKept = 0;
-    const trimmed = messages.map((m) => {
-      let media: string | null = null;
-      if (data.includeMedia && m.media_data && mediaKept < 20) {
-        media = m.media_data;
-        mediaKept += 1;
-      }
-      return {
-        id: m.id,
-        conversationId: m.conversation_id,
-        body: m.body,
-        kind: m.kind,
-        createdAt: iso(m.created_at),
-        fileName: m.media_name,
-        mime: media ? m.media_mime : null,
-        media,
-      };
-    });
-    await sql`
-      insert into backup_records (id, user_id, kind, note)
-      values (${crypto.randomUUID()}, ${context.userId}, 'export', ${data.includeMedia ? "with-recent-media" : "text"})
-    `;
-    return {
-      ok: true as const,
-      archive: {
-        product: "BANTER",
-        exportedAt: new Date().toISOString(),
-        note: "Live chats stay on Banter servers so they can be delivered. This file is your personal copy. It is not end-to-end encryption of the live conversation.",
-        profile: mapMe(gate.row, auth.email),
-        messages: trimmed.reverse(),
-      },
-    };
-  });
+export const exportArchive = ({ data }: { data: { includeMedia?: boolean } }) => supabaseAction("export_archive", data);
 
 export const adminOverview = createServerFn({ method: "GET" })
   .middleware([authMiddleware])

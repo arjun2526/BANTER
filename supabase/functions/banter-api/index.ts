@@ -51,7 +51,7 @@ Deno.serve(async(req:Request)=>{
   const friends=(fr.data??[]).flatMap(x=>{const pid=x.user_a===user.id?x.user_b:x.user_a,p=byId.get(pid);return p?[mapPublic(p,"friends",mine)]:[]}).sort((a,b)=>a.displayName.localeCompare(b.displayName));
   const suggestions=await db.from("profiles").select("*").eq("onboarding_complete",true).eq("status","active").eq("discoverability","everyone").neq("user_id",user.id).order("created_at",{ascending:false}).limit(40);
   if(suggestions.error)return reply(400,{ok:false,error:"Could not load suggestions."});
-  const ranked=(suggestions.data??[]).filter(p=>!allIds.includes(p.user_id)&&!reqIds.includes(p.user_id)).filter(p=>!((await isBlocked(user.id,p.user_id)))).map(p=>({p,score:parseList(p.interests).filter(x=>mine.includes(x)).length})).filter(x=>mine.length?x.score>0:true).sort((a,b)=>b.score-a.score).slice(0,12);
+  const ranked=[];for(const p of suggestions.data??[]){if(allIds.includes(p.user_id)||reqIds.includes(p.user_id)||await isBlocked(user.id,p.user_id))continue;const score=parseList(p.interests).filter(x=>mine.includes(x)).length;if(mine.length&&score===0)continue;ranked.push({p,score})}ranked.sort((a,b)=>b.score-a.score);ranked.splice(12);
   return reply(200,{ok:true,requests,friends,suggestions:ranked.map(x=>mapPublic(x.p,"none",mine))});
  }
  if(body.action==="get_profile"){

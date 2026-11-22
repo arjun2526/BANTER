@@ -125,25 +125,28 @@ Deno.serve(async(req:Request)=>{
  if(body.action==="complete_onboarding"){
   const display_name=cleanName(d.displayName),username=cleanUsername(d.username);
   if(!display_name||!username)return reply(400,{ok:false,error:"Enter a valid name and Banter ID."});
+  const existingProfile=await profile(user.id);if(!existingProfile)return reply(404,{ok:false,error:"Profile missing."});if(existingProfile.status==="suspended")return reply(403,{ok:false,error:"This account is suspended."});
   const interests=Array.isArray(d.interests)?d.interests.filter((v):v is string=>typeof v==="string").slice(0,12):[];
-  const {data,error}=await db.from("profiles").update({display_name,username,bio:typeof d.bio==="string"?d.bio.trim().slice(0,160):"",about:typeof d.about==="string"?d.about.trim().slice(0,600):"",interests:JSON.stringify(interests),onboarding_complete:true,username_changed_at:new Date().toISOString()}).eq("user_id",user.id).select("*").single();
+  const {data,error}=await db.from("profiles").update({display_name,username,bio:typeof d.bio==="string"?d.bio.trim().slice(0,160):"",about:typeof d.about==="string"?d.about.trim().slice(0,600):"",hobbies:typeof d.hobbies==="string"?d.hobbies.trim().slice(0,200):"",interests:JSON.stringify(interests),onboarding_complete:true,username_changed_at:new Date().toISOString()}).eq("user_id",user.id).select("*").single();
   if(error?.code==="23505")return reply(409,{ok:false,error:"That Banter ID is already taken."});
   if(error||!data)return reply(400,{ok:false,error:"Could not finish your profile."});
   return reply(200,{ok:true,me:mapMe(data)});
  }
  if(body.action==="update_profile"){
-  const keys=["display_name","username","bio","about","hobbies","location","birthday","interests","socials","discoverability","last_seen_visibility","show_online","read_receipts","theme","notify_messages","notify_friends","notify_stories"];
+  const keys=["display_name","username","bio","about","hobbies","location","birthday","interests","socials","discoverability","last_seen_visibility","show_online","read_receipts","theme","avatar_url","notify_messages","notify_friends","notify_stories"];
   const patch:Record<string,unknown>={};for(const k of keys)if(Object.hasOwn(d,k))patch[k]=d[k];
   if(patch.display_name!==undefined){const n=cleanName(patch.display_name);if(!n)return reply(400,{ok:false,error:"Invalid display name."});patch.display_name=n}
   if(patch.username!==undefined){const n=cleanUsername(patch.username);if(!n)return reply(400,{ok:false,error:"Invalid Banter ID."});patch.username=n}
   if(patch.bio!==undefined&&typeof patch.bio==="string")patch.bio=patch.bio.trim().slice(0,160);
   if(patch.about!==undefined&&typeof patch.about==="string")patch.about=patch.about.trim().slice(0,600);
+  if(patch.hobbies!==undefined&&typeof patch.hobbies==="string")patch.hobbies=patch.hobbies.trim().slice(0,200);
+  if(patch.avatar_url!==undefined&&patch.avatar_url!==null&&typeof patch.avatar_url==="string"&&!/^data:image\\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(patch.avatar_url)&&!/^https:\\/\\//.test(patch.avatar_url))return reply(400,{ok:false,error:"Invalid avatar image."});
   if(patch.theme!==undefined&&!["dark","light"].includes(String(patch.theme)))return reply(400,{ok:false,error:"Invalid theme."});
   if(patch.discoverability!==undefined&&!["everyone","friends","nobody"].includes(String(patch.discoverability)))return reply(400,{ok:false,error:"Invalid discoverability setting."});
   const {data,error}=await db.from("profiles").update(patch).eq("user_id",user.id).select("*").single();
   if(error?.code==="23505")return reply(409,{ok:false,error:"That Banter ID is already taken."});
   if(error||!data)return reply(400,{ok:false,error:"Could not update your profile."});
-  return reply(200,{ok:true,profile:data});
+  return reply(200,{ok:true,me:mapMe(data)});
  }
  return reply(404,{ok:false,error:"Unknown BANTER API action."});
 });

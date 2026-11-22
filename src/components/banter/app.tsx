@@ -167,8 +167,7 @@ function Panel() {
 function Inbox({ mobile = false }: { mobile?: boolean }) {
   const b = useBanter();
   const [archived, setArchived] = useState(false);
-  const [q, setQ] = useState("");
-  const rows = b.chats.filter((c) => c.archived === archived && (!q || `${c.title} ${c.preview}`.toLowerCase().includes(q.toLowerCase())));
+  const rows = b.chats.filter((c) => c.archived === archived);
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between px-4 pt-4 md:pt-2">
@@ -179,7 +178,7 @@ function Inbox({ mobile = false }: { mobile?: boolean }) {
           </div>
         ) : <h2 className="text-sm tracking-wide text-muted uppercase">Chats</h2>}
         <div className="flex gap-1">
-          <IconBtn label="Search" onClick={() => b.nav({ name: "search" })}><Search className="size-5" /></IconBtn>
+          <IconBtn label="Find friends" onClick={() => b.nav({ name: "people" })}><Search className="size-5" /></IconBtn>
           <IconBtn label="Notices" onClick={() => b.nav({ name: "notifications" })}>
             <span className="relative">
               <Bell className="size-5" />
@@ -187,9 +186,6 @@ function Inbox({ mobile = false }: { mobile?: boolean }) {
             </span>
           </IconBtn>
         </div>
-      </div>
-      <div className="px-4 py-3">
-        <input className={inputClass} placeholder="Filter conversations" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <StoryRow />
       <div className="flex gap-2 px-4 pb-2">
@@ -466,7 +462,7 @@ function People() {
   const [hits, setHits] = useState<Person[] | null>(null);
   return (
     <div className="flex h-full flex-col">
-      <TopBar title="People" onBack={b.back} right={<Btn className="px-3" onClick={() => b.nav({ name: "new-group" })}>New group</Btn>} />
+      <TopBar title="Find friends" onBack={b.back} right={<Btn className="px-3" onClick={() => b.nav({ name: "new-group" })}>New group</Btn>} />
       <div className="space-y-3 overflow-y-auto px-4 py-3">
         <form onSubmit={(e) => {
           e.preventDefault();

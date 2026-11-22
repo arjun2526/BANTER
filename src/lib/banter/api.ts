@@ -743,42 +743,24 @@ export const postSignal = ({ data }: { data: { callId: string; payload: string }
 
 export const callLog = () => supabaseAction("call_log");
 
-export const listSessions = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    const sql = await getSql();
-    const rows = await sql<{
-      id: string;
-      createdAt: unknown;
-      updatedAt: unknown;
-      ipAddress: string | null;
-      userAgent: string | null;
-      expiresAt: unknown;
-    }>`
-      select "id", "createdAt", "updatedAt", "ipAddress", "userAgent", "expiresAt"
-      from "session" where "userId" = ${context.userId}
-      order by "updatedAt" desc
-    `;
-    return {
-      ok: true as const,
-      sessions: rows.map((r) => ({
-        id: r.id,
-        createdAt: iso(r.createdAt),
-        updatedAt: iso(r.updatedAt),
-        ip: r.ipAddress,
-        userAgent: r.userAgent,
-        expiresAt: iso(r.expiresAt),
-      })),
-    };
-  });
+export const listSessions = async () => {
+  const { data, error } = await requireSupabase().auth.getSession();
+  if (error) return { ok: false, error: error.message, sessions: [] };
+  const session = data.session;
+  return { ok: true, sessions: session ? [{
+    id: "current-device",
+    createdAt: null,
+    updatedAt: null,
+    ip: null,
+    userAgent: typeof navigator === "undefined" ? null : navigator.userAgent,
+    expiresAt: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+  }] : [] };
+};
 
-export const signOutAll = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }): Promise<{ ok: true }> => {
-    const sql = await getSql();
-    await sql`delete from "session" where "userId" = ${context.userId}`;
-    return { ok: true };
-  });
+export const signOutAll = async () => {
+  const { error } = await requireSupabase().auth.signOut({ scope: "global" });
+  return error ? { ok: false, error: error.message } : { ok: true };
+};
 
 export const exportArchive = ({ data }: { data: { includeMedia?: boolean } }) => supabaseAction("export_archive", data);
 

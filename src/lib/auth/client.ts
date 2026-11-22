@@ -60,7 +60,7 @@ export const authClient = {
   },
 
   signUp: {
-    email: async ({ email, password, name }: { email: string; password: string; name: string }) => {
+    email: async ({ email, password, name }: { email: string; password: string; name: string; callbackURL?: string }) => {
       if (!supabase) return { error: { message: "BANTER is not configured yet." } };
       const { error } = await supabase.auth.signUp({
         email,
@@ -72,7 +72,7 @@ export const authClient = {
   },
 
   signIn: {
-    email: async ({ email, password }: { email: string; password: string }) => {
+    email: async ({ email, password }: { email: string; password: string; callbackURL?: string }) => {
       if (!supabase) return { error: { message: "BANTER is not configured yet." } };
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       return { error: error ? { message: error.message } : null };

@@ -51,42 +51,29 @@ export function AuthScreen() {
   }
 
   return (
-    <main className="grid min-h-dvh bg-bg text-fg md:grid-cols-2">
-      <section className="wall-clay flex flex-col justify-between px-6 py-8 md:px-12">
-        <div className="flex items-center gap-3">
+    <main className="grid min-h-dvh place-items-center bg-bg px-6 py-10 text-fg">
+      <section className="w-full max-w-sm space-y-5">
+        <div className="flex items-center justify-center gap-3">
           <Mark />
           <Wordmark subtitle={false} />
         </div>
-        <div className="py-10">
-          <p className="font-display text-4xl leading-tight text-fg md:text-6xl">
-            Every conversation has a story.
-          </p>
-          <p className="mt-4 max-w-sm text-sm text-muted">
-            Banter is a private place for friends — not a feed, not a broadcast. Say something worth keeping.
-          </p>
-        </div>
-        <p className="text-xs text-muted">Your BANTER account is yours. Sign in securely with your email and password.</p>
-      </section>
-      <section className="flex items-center justify-center px-6 py-10">
-        <div className="w-full max-w-sm space-y-4">
-          <h1 className="font-display text-3xl">{mode === "up" ? "Create your place" : "Welcome back"}</h1>
-          <form className="space-y-3" onSubmit={submit}>
-            <Field label="Email">
-              <input className={inputClass} autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </Field>
-            <Field label="Password">
-              <input className={inputClass} type="password" autoComplete={mode === "up" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
-            </Field>
-            {error ? <p className="text-sm text-danger">{error}</p> : null}
-            {notice ? <p className="text-sm text-muted">{notice}</p> : null}
-            <Btn type="submit" className="w-full" disabled={busy}>
-              {busy ? "Working…" : mode === "up" ? "Create account" : "Sign in"}
-            </Btn>
-          </form>
-          <button type="button" className="text-sm text-apricot" onClick={() => { setMode(mode === "up" ? "in" : "up"); setError(null); setNotice(null); }}>
-            {mode === "up" ? "Already have an account? Sign in" : "New here? Create an account"}
-          </button>
-        </div>
+        <h1 className="text-center font-display text-3xl">{mode === "up" ? "Create your place" : "Welcome back"}</h1>
+        <form className="space-y-3" onSubmit={submit}>
+          <Field label="Email">
+            <input className={inputClass} autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Field label="Password">
+            <input className={inputClass} type="password" autoComplete={mode === "up" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
+          </Field>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {notice ? <p className="text-sm text-muted">{notice}</p> : null}
+          <Btn type="submit" className="w-full" disabled={busy}>
+            {busy ? "Working…" : mode === "up" ? "Create account" : "Sign in"}
+          </Btn>
+        </form>
+        <button type="button" className="w-full text-center text-sm text-apricot" onClick={() => { setMode(mode === "up" ? "in" : "up"); setError(null); setNotice(null); }}>
+          {mode === "up" ? "Already have an account? Sign in" : "New here? Create an account"}
+        </button>
       </section>
     </main>
   );

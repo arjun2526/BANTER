@@ -555,7 +555,7 @@ function PersonScreen({ userId }: { userId: string }) {
   const [missing, setMissing] = useState<string | null>(null);
   useEffect(() => {
     void api.getProfile({ data: { userId } }).then((res) => {
-      if (!res.ok) setMissing(res.error);
+      if (!res.ok) setMissing(res.error ?? "Could not load this profile.");
       else if (res.self) b.tab("me");
       else setPerson(res.person);
     });
@@ -646,7 +646,7 @@ function StoryViewer({ userId }: { userId: string }) {
   const [index, setIndex] = useState(0);
   const [photo, setPhoto] = useState<string | null>(null);
   useEffect(() => {
-    void api.storiesFor({ data: { userId } }).then((res) => { if (res.ok) setItems(res.stories); else b.toastMsg(res.error); });
+    void api.storiesFor({ data: { userId } }).then((res) => { if (res.ok) setItems(res.stories); else b.toastMsg(res.error ?? "Could not load stories."); });
   }, [userId]);
   const item = items[index];
   useEffect(() => {

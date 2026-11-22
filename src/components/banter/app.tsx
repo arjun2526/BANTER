@@ -674,7 +674,7 @@ function Stories() {
 
 function StoryViewer({ userId }: { userId: string }) {
   const b = useBanter();
-  const [items, setItems] = useState<{ id: string; kind: string; body: string; bg: string; hasMedia: boolean; createdAt: string | null; views: number }[]>([]);
+  const [items, setItems] = useState<{ id: string; kind: string; body: string; bg: string; hasMedia: boolean; mediaMime?: string | null; createdAt: string | null; views: number }[]>([]);
   const [index, setIndex] = useState(0);
   const [media, setMedia] = useState<{ url: string; mime: string } | null>(null);
   useEffect(() => {

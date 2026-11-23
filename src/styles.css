@@ -308,8 +308,8 @@ main.grid.min-h-dvh.place-items-center.px-6.py-10 > section form button { margin
 @media (max-width: 767px) {
   header {
     min-height: 76px;
-    padding-top: max(18px, env(safe-area-inset-top)) !important;
-    padding-bottom: 14px !important;
+    padding-top: max(25px, calc(env(safe-area-inset-top) + 10px)) !important;
+    padding-bottom: 15px !important;
   }
   .you-page .you-hero { padding-top: max(24px, env(safe-area-inset-top)); }
 }
@@ -335,3 +335,38 @@ main.grid.min-h-dvh.place-items-center.px-6.py-10 > section form button { margin
 }
 .you-menu-group > button:last-child { border-bottom: 0; }
 .you-menu-group > button:active { background: color-mix(in srgb, var(--clay) 10%, transparent); }
+
+/* Unified secondary-page rhythm and WhatsApp-inspired You hub */
+.you-page { background: var(--bg); }
+.you-topbar {
+  min-height: 86px; display:flex; align-items:center; justify-content:space-between;
+  padding: max(22px, env(safe-area-inset-top)) 20px 14px;
+}
+.you-kicker { color:var(--apricot); font-size:10px; font-weight:850; letter-spacing:.17em; margin-bottom:5px; }
+.you-settings-button {
+  width:44px;height:44px;border-radius:15px;border:1px solid var(--line);
+  background:var(--elev);color:var(--fg);font-size:20px;
+}
+.you-profile-card {
+  position:relative; overflow:hidden; margin:0 16px; padding:22px;
+  border:1px solid rgb(255 255 255 / 9%); border-radius:26px;
+  background:linear-gradient(145deg,#1b2343 0%,#171d36 56%,#103b43 100%);
+  box-shadow:0 18px 48px rgb(0 0 0 / 18%);
+}
+.you-profile-glow { position:absolute;width:240px;height:240px;right:-95px;top:-140px;border-radius:50%;background:radial-gradient(circle,rgb(133 123 255 / 35%),transparent 68%);pointer-events:none; }
+.you-avatar-ring { flex:none;padding:3px;border-radius:50%;background:linear-gradient(135deg,#a296ff,#6ce8d3); }
+.you-stat { display:flex;align-items:baseline;gap:8px;padding:10px 12px;border:1px solid rgb(255 255 255 / 12%);border-radius:14px;background:rgb(255 255 255 / 6%);color:#fff; }
+.you-stat span { font-size:20px;font-weight:850;letter-spacing:-.04em; }
+.you-stat small { color:rgb(255 255 255 / 58%);font-size:9px;font-weight:800;letter-spacing:.13em; }
+.you-menu-group { overflow:hidden;border:1px solid var(--line);border-radius:20px;background:var(--elev);padding:12px; }
+.you-section-label { padding:2px 5px 9px;color:var(--muted);font-size:10px;font-weight:850;letter-spacing:.16em; }
+.you-menu-row { display:flex;align-items:center;gap:12px;width:100%;min-height:66px;padding:9px 7px;border-bottom:1px solid var(--line);border-radius:12px;background:transparent; }
+.you-menu-row:last-child { border-bottom:0; }
+.you-row-icon { display:grid;place-items:center;flex:none;width:39px;height:39px;border-radius:13px;background:color-mix(in srgb,var(--clay) 13%,var(--sunken));font-size:17px; }
+.you-row-chevron { color:var(--muted);font-size:25px;line-height:1; }
+.you-menu-row:active { background:color-mix(in srgb,var(--clay) 9%,transparent); }
+.you-footer-card { padding:16px;border:1px solid var(--line);border-radius:20px;background:var(--elev); }
+@media (max-width:767px) {
+  header { min-height:82px; padding-top:max(25px,calc(env(safe-area-inset-top) + 10px)) !important; }
+  .you-topbar { min-height:88px; }
+}

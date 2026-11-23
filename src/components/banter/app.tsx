@@ -661,41 +661,41 @@ function StoryViewer({ userId }: { userId: string }) {
 function MeScreen() {
   const b = useBanter();
   const me = b.me!;
+  const friendCount = b.people?.friends.length ?? 0;
+  const groups = [
+    { title: "ACCOUNT", rows: [
+      ["✎", "Edit profile", "Name, photo, bio and Banter ID", () => b.nav({ name: "edit" })],
+      ["🔒", "Privacy", "Who can find and see you", () => b.nav({ name: "privacy" })],
+      ["🛡", "Security", "Password and signed-in devices", () => b.nav({ name: "security" })],
+    ] },
+    { title: "PREFERENCES", rows: [
+      ["🎨", "Appearance", me.theme === "light" ? "Currently using light theme" : "Currently using dark theme", () => b.nav({ name: "settings" })],
+      ["🔔", "Notifications", "Messages, friends and stories", () => b.nav({ name: "notifications" })],
+      ["💬", "Chats and backups", "Export or restore your chats", () => b.nav({ name: "backup" })],
+      ["⚙", "Settings", "Account and app preferences", () => b.nav({ name: "settings" })],
+    ] },
+  ] as const;
   return (
     <div className="you-page h-full overflow-y-auto">
-      <div className="you-hero relative overflow-hidden px-5 pb-6 pt-8">
-        <div className="you-hero-glow" />
-        <div className="relative flex items-center justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-[.18em] text-apricot">YOUR SPACE</p><h1 className="mt-1 font-display text-3xl">You</h1></div>
-          <button type="button" aria-label="Settings" className="grid size-11 place-items-center rounded-2xl border border-white/10 bg-white/5" onClick={() => b.nav({ name: "settings" })}><span className="text-xl">⚙</span></button>
+      <div className="you-topbar"><div><p className="you-kicker">BANTER ACCOUNT</p><h1 className="font-display text-3xl">You</h1></div><button type="button" aria-label="Settings" className="you-settings-button" onClick={() => b.nav({ name: "settings" })}>⚙</button></div>
+      <div className="you-profile-card">
+        <div className="you-profile-glow" />
+        <div className="relative flex items-center gap-4">
+          <div className="you-avatar-ring"><Avatar name={me.displayName} url={me.avatarUrl} className="size-[82px] rounded-full border-4 border-[#11182b] text-2xl" /></div>
+          <div className="min-w-0 flex-1"><h2 className="truncate font-display text-2xl text-white">{me.displayName}</h2><p className="mt-1 text-sm font-semibold text-[#78e5d4]">{me.username ? `@${me.username}` : "Set your Banter ID"}</p><p className="mt-1 line-clamp-2 text-sm text-white/65">{me.bio || "Your space. Your people. Your conversations."}</p></div>
         </div>
-        <div className="relative mt-6 flex items-center gap-4">
-          <div className="rounded-full bg-gradient-to-br from-[#8b83ff] to-[#62dfcb] p-[3px]"><Avatar name={me.displayName} url={me.avatarUrl} className="size-[76px] rounded-full border-[3px] border-[#121a2d] text-2xl" /></div>
-          <div className="min-w-0 flex-1"><h2 className="truncate font-display text-2xl">{me.displayName}</h2><p className="mt-0.5 text-sm text-apricot">{me.username ? `@${me.username}` : "Choose your Banter ID"}</p><p className="mt-1 line-clamp-2 text-sm text-white/65">{me.bio || "Add a little about yourself."}</p></div>
-        </div>
-        <button type="button" className="relative mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 text-sm font-bold text-white" onClick={() => b.nav({ name: "edit" })}>✎ Edit profile</button>
+        <div className="relative mt-5 grid grid-cols-2 gap-2"><div className="you-stat"><span>{friendCount}</span><small>FRIENDS</small></div><div className="you-stat"><span>{b.chats.length}</span><small>CHATS</small></div></div>
+        <div className="relative mt-3 flex gap-2"><Btn className="flex-1 !bg-white !text-[#171d36]" onClick={() => b.nav({ name: "edit" })}>✎ Edit profile</Btn>{me.username ? <Btn tone="ghost" className="!border-white/20 !text-white" onClick={() => b.nav({ name: "edit" })}>My ID</Btn> : null}</div>
       </div>
-      <div className="space-y-5 px-4 pb-8 pt-5">
+      <div className="space-y-5 px-4 pb-10 pt-5">
         {me.username ? <QrCard username={me.username} /> : null}
-        <section className="you-menu-group">
-          <p className="you-section-label">ACCOUNT</p>
-          <Row label="Account details" onClick={() => b.nav({ name: "edit" })} />
-          <Row label="Privacy" onClick={() => b.nav({ name: "privacy" })} />
-          <Row label="Security" onClick={() => b.nav({ name: "security" })} />
-        </section>
-        <section className="you-menu-group">
-          <p className="you-section-label">PREFERENCES</p>
-          <Row label="Notifications" onClick={() => b.nav({ name: "notifications" })} />
-          <Row label="Chats and backups" onClick={() => b.nav({ name: "backup" })} />
-          <Row label="Settings" onClick={() => b.nav({ name: "settings" })} />
-        </section>
-        {me.role === "admin" ? <section className="you-menu-group"><p className="you-section-label">MANAGEMENT</p><Row label="Moderation" onClick={() => b.nav({ name: "admin" })} /></section> : null}
-        <div className="rounded-2xl border border-line bg-elev/70 px-4 py-3"><p className="text-xs text-muted">MEMBER SINCE</p><p className="mt-1 text-sm font-semibold">{when(me.createdAt)}</p><p className="mt-2 text-xs text-muted">Interests · {me.interests.join(", ") || "Add interests to your profile"}</p></div>
+        {groups.map((group) => <section key={group.title} className="you-menu-group"><p className="you-section-label">{group.title}</p>{group.rows.map(([icon, label, detail, action]) => <button key={label} type="button" className="you-menu-row" onClick={action}><span className="you-row-icon">{icon}</span><span className="min-w-0 flex-1 text-left"><span className="block text-sm font-bold text-fg">{label}</span><span className="mt-0.5 block truncate text-xs text-muted">{detail}</span></span><span className="you-row-chevron">›</span></button>)}</section>)}
+        {me.role === "admin" ? <section className="you-menu-group"><p className="you-section-label">MANAGEMENT</p><button type="button" className="you-menu-row" onClick={() => b.nav({ name: "admin" })}><span className="you-row-icon">🛠</span><span className="flex-1 text-left text-sm font-bold">Moderation</span><span className="you-row-chevron">›</span></button></section> : null}
+        <section className="you-footer-card"><div className="flex items-center gap-3"><Mark className="size-9" /><div><p className="text-sm font-extrabold tracking-wide">BANTER</p><p className="text-xs text-muted">Every conversation has a story.</p></div></div><p className="mt-3 text-xs text-muted">Member since {when(me.createdAt)} · {me.interests.length ? me.interests.slice(0, 3).join(" · ") : "Make this space yours"}</p></section>
       </div>
     </div>
   );
 }
-
 function QrCard({ username }: { username: string }) {
   const [src, setSrc] = useState<string | null>(null);
   const url = typeof window === "undefined" ? "" : `${window.location.origin}/u/${username}`;

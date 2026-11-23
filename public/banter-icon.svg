@@ -1,8 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-<rect width="512" height="512" fill="#100e0d"/>
-<rect x="64" y="64" width="384" height="384" rx="104" fill="#f36f35"/>
-<path d="M128 255c0-67 58-118 132-118h73c72 0 123 44 123 105 0 62-52 107-124 107h-49l-69 61v-66c-53-16-86-48-86-89z" fill="#100e0d"/>
-<circle cx="223" cy="247" r="17" fill="#f36f35"/>
-<circle cx="288" cy="247" r="17" fill="#f36f35"/>
-<circle cx="353" cy="247" r="17" fill="#f36f35"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#8b83ff"/><stop offset="1" stop-color="#62dfcb"/></linearGradient></defs><rect width="64" height="64" rx="19" fill="#121a2d"/><path d="M13 28.5c0-9 7.3-16.2 16.3-16.2h8.5c8.5 0 15.2 6.2 15.2 14.2s-6.7 14.2-15.2 14.2h-6.2l-10.3 9v-10C16.3 37.3 13 33.5 13 28.5Z" fill="url(#g)"/><circle cx="26" cy="28.5" r="2.4" fill="#10172a"/><circle cx="34" cy="28.5" r="2.4" fill="#10172a"/><circle cx="42" cy="28.5" r="2.4" fill="#10172a"/></svg>

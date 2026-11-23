@@ -662,22 +662,35 @@ function MeScreen() {
   const b = useBanter();
   const me = b.me!;
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="wall-dusk px-5 pt-8 pb-6">
-        <Avatar name={me.displayName} url={me.avatarUrl} className="size-20 text-2xl" />
-        <h1 className="mt-4 font-display text-4xl">{me.displayName}</h1>
-        <p className="text-sm text-apricot">{me.username ? `@${me.username}` : "Choose an ID"}</p>
-        <p className="mt-2 max-w-sm text-sm text-muted">{me.bio}</p>
+    <div className="you-page h-full overflow-y-auto">
+      <div className="you-hero relative overflow-hidden px-5 pb-6 pt-8">
+        <div className="you-hero-glow" />
+        <div className="relative flex items-center justify-between">
+          <div><p className="text-xs font-bold uppercase tracking-[.18em] text-apricot">YOUR SPACE</p><h1 className="mt-1 font-display text-3xl">You</h1></div>
+          <button type="button" aria-label="Settings" className="grid size-11 place-items-center rounded-2xl border border-white/10 bg-white/5" onClick={() => b.nav({ name: "settings" })}><span className="text-xl">⚙</span></button>
+        </div>
+        <div className="relative mt-6 flex items-center gap-4">
+          <div className="rounded-full bg-gradient-to-br from-[#8b83ff] to-[#62dfcb] p-[3px]"><Avatar name={me.displayName} url={me.avatarUrl} className="size-[76px] rounded-full border-[3px] border-[#121a2d] text-2xl" /></div>
+          <div className="min-w-0 flex-1"><h2 className="truncate font-display text-2xl">{me.displayName}</h2><p className="mt-0.5 text-sm text-apricot">{me.username ? `@${me.username}` : "Choose your Banter ID"}</p><p className="mt-1 line-clamp-2 text-sm text-white/65">{me.bio || "Add a little about yourself."}</p></div>
+        </div>
+        <button type="button" className="relative mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 text-sm font-bold text-white" onClick={() => b.nav({ name: "edit" })}>✎ Edit profile</button>
       </div>
-      <div className="space-y-2 px-4 py-4">
+      <div className="space-y-5 px-4 pb-8 pt-5">
         {me.username ? <QrCard username={me.username} /> : null}
-        <Row label="Edit profile" onClick={() => b.nav({ name: "edit" })} />
-        <Row label="Settings" onClick={() => b.nav({ name: "settings" })} />
-        <Row label="Privacy" onClick={() => b.nav({ name: "privacy" })} />
-        <Row label="Security" onClick={() => b.nav({ name: "security" })} />
-        <Row label="Backups" onClick={() => b.nav({ name: "backup" })} />
-        {me.role === "admin" ? <Row label="Moderation" onClick={() => b.nav({ name: "admin" })} /> : null}
-        <p className="pt-2 text-xs text-muted">Joined {when(me.createdAt)}. Interests: {me.interests.join(", ") || "none yet"}.</p>
+        <section className="you-menu-group">
+          <p className="you-section-label">ACCOUNT</p>
+          <Row label="Account details" onClick={() => b.nav({ name: "edit" })} />
+          <Row label="Privacy" onClick={() => b.nav({ name: "privacy" })} />
+          <Row label="Security" onClick={() => b.nav({ name: "security" })} />
+        </section>
+        <section className="you-menu-group">
+          <p className="you-section-label">PREFERENCES</p>
+          <Row label="Notifications" onClick={() => b.nav({ name: "notifications" })} />
+          <Row label="Chats and backups" onClick={() => b.nav({ name: "backup" })} />
+          <Row label="Settings" onClick={() => b.nav({ name: "settings" })} />
+        </section>
+        {me.role === "admin" ? <section className="you-menu-group"><p className="you-section-label">MANAGEMENT</p><Row label="Moderation" onClick={() => b.nav({ name: "admin" })} /></section> : null}
+        <div className="rounded-2xl border border-line bg-elev/70 px-4 py-3"><p className="text-xs text-muted">MEMBER SINCE</p><p className="mt-1 text-sm font-semibold">{when(me.createdAt)}</p><p className="mt-2 text-xs text-muted">Interests · {me.interests.join(", ") || "Add interests to your profile"}</p></div>
       </div>
     </div>
   );

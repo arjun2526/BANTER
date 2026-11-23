@@ -302,3 +302,36 @@ main.grid.min-h-dvh.place-items-center.px-6.py-10 > section form button { margin
   .flex.h-full.flex-col > .flex.items-center.justify-between.px-4 { min-height: 76px; padding-top: max(18px, env(safe-area-inset-top)) !important; }
   .flex.w-full.items-center.gap-3.px-4.py-3.text-left { min-height: 76px; }
 }
+
+
+/* Consistent top safe-area rhythm for every secondary page */
+@media (max-width: 767px) {
+  header {
+    min-height: 76px;
+    padding-top: max(18px, env(safe-area-inset-top)) !important;
+    padding-bottom: 14px !important;
+  }
+  .you-page .you-hero { padding-top: max(24px, env(safe-area-inset-top)); }
+}
+.you-hero {
+  background: linear-gradient(145deg, #171d39 0%, #171a34 48%, #102a36 100%);
+}
+.you-hero-glow {
+  position: absolute; width: 260px; height: 260px; right: -95px; top: -130px;
+  border-radius: 999px; pointer-events: none;
+  background: radial-gradient(circle, rgb(139 131 255 / 34%), transparent 68%);
+}
+.you-menu-group {
+  overflow: hidden; border: 1px solid var(--line); border-radius: 20px;
+  background: var(--elev); padding: 12px;
+}
+.you-section-label {
+  padding: 2px 5px 9px; color: var(--muted); font-size: 10px;
+  font-weight: 800; letter-spacing: .16em;
+}
+.you-menu-group > button {
+  min-height: 52px; border-radius: 13px; background: transparent;
+  border-bottom: 1px solid var(--line); padding-inline: 8px;
+}
+.you-menu-group > button:last-child { border-bottom: 0; }
+.you-menu-group > button:active { background: color-mix(in srgb, var(--clay) 10%, transparent); }

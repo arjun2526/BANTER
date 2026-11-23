@@ -230,7 +230,7 @@ function ChatRow({ chat }: { chat: Chat }) {
       <Avatar name={chat.title || "?"} url={chat.avatarUrl} online={chat.online} />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate font-medium">{chat.title}</span>
+          <span className="flex min-w-0 items-center gap-1.5 truncate font-medium">{chat.title}{chat.title?.trim().toLowerCase() === "arjun" ? null : null}</span>
           <span className="shrink-0 text-[11px] text-muted tabular-nums">{when(chat.lastAt)}</span>
         </span>
         <span className="mt-0.5 flex items-center gap-2 text-sm text-muted">
@@ -531,7 +531,7 @@ function PersonScreen({ userId }: { userId: string }) {
       <TopBar title={person.username ? `@${person.username}` : "Profile"} onBack={b.back} />
       <div className="wall-clay px-5 py-8">
         <Avatar name={person.displayName} url={person.avatarUrl} className="size-20 text-2xl" online={person.online} />
-        <h1 className="mt-4 font-display text-4xl">{person.displayName}</h1>
+        <h1 className="mt-4 flex flex-wrap items-center justify-center gap-2 font-display text-4xl">{person.displayName}{person.username?.toLowerCase() === "dev_arjun" ? <CeoBadge /> : null}</h1>
         <p className="mt-2 text-sm text-muted">{person.bio || "No bio yet."}</p>
       </div>
       <div className="space-y-3 px-5 py-4">
@@ -682,7 +682,7 @@ function MeScreen() {
         <div className="you-profile-glow" />
         <div className="relative flex items-center gap-4">
           <div className="you-avatar-ring"><Avatar name={me.displayName} url={me.avatarUrl} className="size-[82px] rounded-full border-4 border-[#11182b] text-2xl" /></div>
-          <div className="min-w-0 flex-1"><h2 className="truncate font-display text-2xl text-white">{me.displayName}</h2><p className="mt-1 text-sm font-semibold text-[#78e5d4]">{me.username ? `@${me.username}` : "Set your Banter ID"}</p><p className="mt-1 line-clamp-2 text-sm text-white/65">{me.bio || "Your space. Your people. Your conversations."}</p></div>
+          <div className="min-w-0 flex-1"><h2 className="flex min-w-0 flex-wrap items-center gap-2 font-display text-2xl text-white"><span className="truncate">{me.displayName}</span>{me.username?.toLowerCase() === "dev_arjun" ? <CeoBadge /> : null}</h2><p className="mt-1 text-sm font-semibold text-[#78e5d4]">{me.username ? `@${me.username}` : "Set your Banter ID"}</p><p className="mt-1 line-clamp-2 text-sm text-white/65">{me.bio || "Your space. Your people. Your conversations."}</p></div>
         </div>
         <div className="relative mt-5 grid grid-cols-2 gap-2"><div className="you-stat"><span>{friendCount}</span><small>FRIENDS</small></div><div className="you-stat"><span>{b.chats.length}</span><small>CHATS</small></div></div>
         <div className="relative mt-3 flex gap-2"><Btn className="flex-1 !bg-white !text-[#171d36]" onClick={() => b.nav({ name: "edit" })}>✎ Edit profile</Btn>{me.username ? <Btn tone="ghost" className="!border-white/20 !text-white" onClick={() => b.nav({ name: "edit" })}>My ID</Btn> : null}</div>
@@ -696,6 +696,10 @@ function MeScreen() {
     </div>
   );
 }
+function CeoBadge() {
+  return <span title="BANTER CEO" aria-label="BANTER CEO" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#9a8cff]/50 bg-gradient-to-r from-[#40366f] to-[#164b4b] px-2 py-1 align-middle font-sans text-[10px] font-extrabold uppercase tracking-[.12em] text-[#d9d5ff] shadow-[0_0_14px_rgba(154,140,255,.2)]"><span aria-hidden="true">✦</span> CEO</span>;
+}
+
 function QrCard({ username }: { username: string }) {
   const [src, setSrc] = useState<string | null>(null);
   const url = typeof window === "undefined" ? "" : `${window.location.origin}/u/${username}`;

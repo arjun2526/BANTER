@@ -1,10 +1,14 @@
 export function Mark({ className = "size-10" }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className} role="img" aria-label="BANTER">
-      <defs><linearGradient id="banter-mark-gradient" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stopColor="#8b83ff"/><stop offset="1" stopColor="#62dfcb"/></linearGradient></defs>
-      <rect width="64" height="64" rx="19" fill="#121a2d"/>
-      <path d="M13 28.5c0-9 7.3-16.2 16.3-16.2h8.5c8.5 0 15.2 6.2 15.2 14.2s-6.7 14.2-15.2 14.2h-6.2l-10.3 9v-10C16.3 37.3 13 33.5 13 28.5Z" fill="url(#banter-mark-gradient)"/>
-      <circle cx="26" cy="28.5" r="2.4" fill="#10172a"/><circle cx="34" cy="28.5" r="2.4" fill="#10172a"/><circle cx="42" cy="28.5" r="2.4" fill="#10172a"/>
+      <defs>
+        <linearGradient id="banter-mark-gradient" x1="7" y1="8" x2="57" y2="57" gradientUnits="userSpaceOnUse"><stop stopColor="#9a8cff"/><stop offset=".52" stopColor="#7777ff"/><stop offset="1" stopColor="#62e6d0"/></linearGradient>
+        <linearGradient id="banter-mark-glow" x1="12" y1="9" x2="54" y2="57" gradientUnits="userSpaceOnUse"><stop stopColor="#fff" stopOpacity=".24"/><stop offset="1" stopColor="#fff" stopOpacity="0"/></linearGradient>
+      </defs>
+      <rect x="1" y="1" width="62" height="62" rx="20" fill="#11182b" stroke="#ffffff" strokeOpacity=".12" strokeWidth="2"/>
+      <path d="M12 27.5c0-9 7.3-16.2 16.3-16.2h10.1c8.6 0 15.4 6.3 15.4 14.3s-6.8 14.3-15.4 14.3h-6.1l-11.1 9.4v-10C15.5 37.3 12 33.5 12 27.5Z" fill="url(#banter-mark-gradient)"/>
+      <path d="M12 27.5c0-9 7.3-16.2 16.3-16.2h10.1c8.6 0 15.4 6.3 15.4 14.3" fill="none" stroke="url(#banter-mark-glow)" strokeWidth="2"/>
+      <circle cx="25" cy="27.5" r="2.5" fill="#11182b"/><circle cx="33" cy="27.5" r="2.5" fill="#11182b"/><circle cx="41" cy="27.5" r="2.5" fill="#11182b"/>
     </svg>
   );
 }

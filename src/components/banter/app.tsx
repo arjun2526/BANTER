@@ -170,7 +170,7 @@ function Inbox({ mobile = false }: { mobile?: boolean }) {
   const rows = b.chats.filter((c) => c.archived === archived);
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between px-4 pt-4 md:pt-2">
+      <div className="flex items-center justify-between px-4 pt-6 md:pt-2">
         {mobile ? (
           <div className="flex items-center gap-2">
             <Mark className="size-9" />
@@ -187,7 +187,7 @@ function Inbox({ mobile = false }: { mobile?: boolean }) {
           </IconBtn>
         </div>
       </div>
-      <StoryRow />
+      <div className="mt-3"><StoryRow /></div>
       <div className="flex gap-2 px-4 pb-2">
         <button type="button" className={`rounded-full px-3 py-1 text-sm ${!archived ? "bg-clay text-on-clay" : "text-muted"}`} onClick={() => setArchived(false)}>Open</button>
         <button type="button" className={`rounded-full px-3 py-1 text-sm ${archived ? "bg-clay text-on-clay" : "text-muted"}`} onClick={() => setArchived(true)}>Archived</button>

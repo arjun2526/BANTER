@@ -15,6 +15,8 @@ export function AppUpdater() {
   const [release, setRelease] = useState<Release | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [downloadError, setDownloadError] = useState(false);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -60,13 +62,38 @@ export function AppUpdater() {
         {error ? <p className="mt-2 text-xs text-[#e9a18a]">Couldn't check for updates. Check your internet connection and reopen BANTER.</p> : null}
         <button
           className="mt-6 w-full rounded-full bg-[#f07845] px-5 py-3 font-semibold text-[#17120f] disabled:opacity-60"
-          disabled={checking}
-          onClick={() => void Browser.open({ url: asset.browser_download_url! })}
+          disabled={checking || opening}
+          onClick={async () => {
+            setOpening(true);
+            setDownloadError(false);
+            try {
+              await Browser.open({ url: asset.browser_download_url! });
+            } catch {
+              setDownloadError(true);
+              try {
+                window.open(asset.browser_download_url!, "_system");
+              } catch {
+                window.location.href = asset.browser_download_url!;
+              }
+            } finally {
+              setOpening(false);
+            }
+          }}
         >
-          Update now
+          {opening ? "Opening download…" : "Update now"}
         </button>
+        <a
+          className="mt-3 block w-full rounded-full border border-[#f07845]/50 px-5 py-3 text-center text-sm font-semibold text-[#f5eee8]"
+          href={asset.browser_download_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => setDownloadError(false)}
+        >
+          Download link
+        </a>
+        {downloadError ? <p className="mt-2 text-center text-xs text-[#e9a18a]">The app couldn't open the download automatically. Use the Download link above.</p> : null}
         <p className="mt-3 text-center text-xs leading-5 text-[#9f9188]">
-          Android will ask you to confirm installation after the APK downloads.
+          After downloading, open BANTER.apk and confirm Android's installation prompt.
         </p>
       </div>
     </div>

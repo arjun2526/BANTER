@@ -1,21 +1,13 @@
 export function Mark({ className = "size-10" }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className} role="img" aria-label="BANTER">
-      <rect width="64" height="64" fill="#100e0d" />
-      <rect x="8" y="8" width="48" height="48" rx="13" fill="#f36f35" />
-      <path d="M16 31.8c0-7.1 6.1-12.5 14.1-12.5h7.8c7.8 0 13.1 4.7 13.1 11.1 0 6.5-5.4 11.2-13.2 11.2h-5.2l-7.4 6.5v-7c-5.5-1.5-9.2-4.7-9.2-9.3Z" fill="#100e0d" />
-      <circle cx="28" cy="30.4" r="2.15" fill="#f36f35" />
-      <circle cx="36" cy="30.4" r="2.15" fill="#f36f35" />
-      <circle cx="44" cy="30.4" r="2.15" fill="#f36f35" />
+      <defs><linearGradient id="banter-mark-gradient" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stopColor="#8b83ff"/><stop offset="1" stopColor="#62dfcb"/></linearGradient></defs>
+      <rect width="64" height="64" rx="19" fill="#121a2d"/>
+      <path d="M13 28.5c0-9 7.3-16.2 16.3-16.2h8.5c8.5 0 15.2 6.2 15.2 14.2s-6.7 14.2-15.2 14.2h-6.2l-10.3 9v-10C16.3 37.3 13 33.5 13 28.5Z" fill="url(#banter-mark-gradient)"/>
+      <circle cx="26" cy="28.5" r="2.4" fill="#10172a"/><circle cx="34" cy="28.5" r="2.4" fill="#10172a"/><circle cx="42" cy="28.5" r="2.4" fill="#10172a"/>
     </svg>
   );
 }
-
 export function Wordmark({ subtitle = true }: { subtitle?: boolean }) {
-  return (
-    <div className="min-w-0">
-      <div className="font-display text-2xl leading-none tracking-tight text-fg">BANTER</div>
-      {subtitle ? <p className="mt-1 text-sm text-muted">Every conversation has a story.</p> : null}
-    </div>
-  );
+  return <div className="min-w-0"><div className="font-display text-2xl leading-none tracking-tight text-fg">BANTER</div>{subtitle ? <p className="mt-1 text-sm text-muted">Every conversation has a story.</p> : null}</div>;
 }

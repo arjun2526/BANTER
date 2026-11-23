@@ -1,6 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import appCss from "../styles.css?url";
+import { AppUpdater } from "@/components/banter/app-updater";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -38,6 +39,7 @@ export const Route = createRootRoute({
       <body>
         <AuthProvider>
           <Outlet />
+          <AppUpdater />
         </AuthProvider>
         <Scripts />
       </body>

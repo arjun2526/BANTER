@@ -506,7 +506,7 @@ function PersonRow({ person }: { person: Person }) {
     <button type="button" className="flex w-full items-center gap-3 py-2 text-left" onClick={() => b.nav({ name: "user", id: person.userId })}>
       <Avatar name={person.displayName} url={person.avatarUrl} online={person.online} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{person.displayName}</span>
+        <span className="flex items-center gap-1.5 truncate font-medium">{person.displayName}{person.username?.toLowerCase() === "dev_arjun" ? <CeoBadge /> : null}</span>
         <span className="block truncate text-sm text-muted">{person.username ? `@${person.username}` : "No ID yet"}{person.sharedInterests.length ? ` · ${person.sharedInterests.slice(0, 2).join(", ")}` : ""}</span>
       </span>
     </button>
